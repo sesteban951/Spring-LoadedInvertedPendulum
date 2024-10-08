@@ -12,7 +12,7 @@ alpha_max_deg = 60;      % max foot angle from verticle [deg]
 params.alpha_max = alpha_max_deg * (pi/180);  % max foot angle [rad]
 
 % trajectory parameters
-params.traj_type = "pos"; % "pos" for constant velocity and "vel" for constant position 
+params.traj_type = "vel"; % "pos" for constant velocity and "vel" for constant position 
 params.v_des = 1.0;       % converge to a fixed velocity
 params.p_des = 1.0;       % converge to a fixed position
 
@@ -39,7 +39,7 @@ tspan = 0:dt:3.0;  % to allow for switching before timeout
 % initial conditions (always start in flight)
 x0 = [0.0;   % x
       1.0;   % z
-      -1.0;   % x_dot
+      0.0;   % x_dot
       0.0];  % z_dot
 domain = "flight";
 
@@ -259,7 +259,7 @@ if animation == 1
         com_history_plot = plot(com_history(:, 1), com_history(:, 2), 'g.', 'MarkerSize', 8);  % Plot history
         
         % current time
-        plot_title = sprintf("Time: %.2f\n x= [%.2f, %.2f]", T(ind) * realtime_rate, X(ind,1), X(ind,3));
+        plot_title = sprintf("Time: %.2f\n apex = [%.2f, %.2f]", T(ind) * realtime_rate, X(ind,2), X(ind,3));
         title(plot_title,'FontSize', 14)   
         
         % adjust the x_axis width
