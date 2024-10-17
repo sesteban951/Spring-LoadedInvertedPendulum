@@ -133,6 +133,35 @@
         <child link="foot"/>
     </joint>
 
-    <!-- TODO: Add the actuators -->
+    <!-- ACTUATORS -->
+    <transmission name="leg_roll_transmission">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="leg_roll">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="leg_roll_actuator">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+
+    <transmission name="leg_pitch_transmission">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="leg_pitch">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="leg_pitch_actuator">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
+
+    <transmission name="leg_prismatic_transmission">
+        <type>transmission_interface/SimpleTransmission</type>
+        <joint name="leg_prismatic">
+            <hardwareInterface>hardware_interface/EffortJointInterface</hardwareInterface>
+        </joint>
+        <actuator name="leg_prismatic_actuator">
+            <mechanicalReduction>1</mechanicalReduction>
+        </actuator>
+    </transmission>
 
 </robot>
