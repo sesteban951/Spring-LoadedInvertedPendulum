@@ -25,7 +25,7 @@
         <visual>
             <origin xyz="0 0 0" rpy="0 0 0"/>
             <geometry>
-                <mesh filename="../meshes/Body.OBJ"/>
+                <mesh filename="../meshes/slip/Body.OBJ"/>
             </geometry>
             <material name="orange"/>
         </visual>
@@ -132,5 +132,7 @@
         <parent link="leg_lower"/>
         <child link="foot"/>
     </joint>
+
+    <!-- TODO: Add the actuators -->
 
 </robot>

@@ -1,50 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
 <mujoco model="3D_SLIP">
-    <compiler angle="radian"/>
 
-    <!-- Options for simulation -->
-    <option timestep="0.01" integrator="RK4" gravity="0 0 -9.81"/>
+    <!-- Set the angles to be in radians -->
+    <compiler angle="radian" autolimits="true" eulerseq="zyx"/>
 
-    <!-- World body -->
+    <!-- Fix simulation options -->
+    <option timestep="0.005" iterations="50" solver="Newton" gravity="0 0 -9.81"  integrator = "RK4"/>
+
+    <size nconmax="100" njmax="500"/>
+
+    <!-- Specify the light settings -->
+    <visual>
+        <headlight ambient="0.5 0.5 0.5"/>
+    </visual>
+
+    <!-- List the location of all meshes -->
+    <asset>
+        <texture type='skybox' builtin='gradient' width='128' height='128' rgb1='0.4 0.6 0.8' rgb2='0 0 0'/>
+        <mesh file="../meshes/slip/Body.STL" name="com"/>
+        <texture builtin="checker" height="512" name="plane" rgb1="0.9 0.9 0.99"
+                 rgb2="0.7 0.7 0.7"
+                 type="2d"
+                 width="512"/>
+        <material name="plane" reflectance="0.5" texrepeat="1 1" texture="plane"
+                  texuniform="true"/>
+    </asset>  
+
+    <!-- Bodies -->
     <worldbody>
         
-        <!-- Ground plane -->
-        <geom type="plane" pos="0 0 0" size="10 10 0.1" material="MatPlane"/>
+        <!-- Ground -->
+        <geom material="plane" name="plane" rgba=".9 .9 .9 1" size="100 100 0.1" type="plane" euler="0 0 0"/>
 
-        <!-- Body (top mass) -->
-        <body name="body" pos="0 0 1">
-            <geom name="body_geom" type="sphere" size="0.1" density="1000" rgba="0 0 1 1"/>
-            <joint name="free_joint" type="free"/>
+        <!-- 3D SLIP Robot -->
+        <body name="com" pos="0 0 1.002">
+            <!-- ixx iyy izz ixy ixz iyz-->
+            <inertial mass="20.0" fullinertia=" 0.045 0.045 0.045 0.0 0.0 0.0" pos="0 0 0.0" />
+            <geom name="com_mesh" conaffinity="0" contype="0" density="0" group="1" mesh="com" type="mesh"/>
+            <freejoint name="root"/>
         </body>
 
-        <!-- Leg (massless) -->
-        <body name="leg" pos="0 0 0.5">
-            <geom name="leg_geom" type="capsule" fromto="0 0 0 0 0 -1" size="0.05" rgba="0.5 0.5 0.5 1"/>
-            <joint name="leg_spring" type="slide" axis="0 0 1" pos="0 0 -0.5" range="0.1 1.0"/>
-        </body>
-
-        <!-- Foot (contact point) -->
-        <body name="foot" pos="0 0 0">
-            <geom name="foot_geom" type="sphere" size="0.05" rgba="1 0 0 1"/>
-        </body>
     </worldbody>
 
-    <!-- Tendon for Spring between body and foot (acts like a spring constraint) -->
-    <tendon>
-        <spatial name="spring_tendon" stiffness="1000" damping="5">
-            <site pos="0 0 1" body="body"/>  <!-- Attach at the body's center -->
-            <site pos="0 0 0" body="foot"/>  <!-- Attach at the foot -->
-        </spatial>
-    </tendon>
-
-    <!-- Actuation for the spring (optional if you want to control the leg) -->
-    <actuator>
-        <motor joint="leg_spring" ctrlrange="0 1" ctrllimited="true" gear="100"/>
-    </actuator>
-
-    <!-- Materials -->
-    <asset>
-        <texture name="texplane" type="2d" builtin="checker" width="512" height="512" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3"/>
-        <material name="MatPlane" texture="texplane" texrepeat="1 1" reflectance="0.3"/>
-    </asset>
+    <!-- Collisions -->
+    <contact>
+        <pair name="com_to_ground" geom1="com_mesh" geom2="plane"/> 
+    </contact>
 
 </mujoco>
