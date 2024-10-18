@@ -37,15 +37,27 @@
         </collision>
     </link>
     
-    <!-- Link: Intermmediate Leg Frames -->
-    <link name="x_axis_leg"/>
-    <link name="y_axis_leg"/>
+    <!-- Link: Intermmediate Servo Frames -->
+    <link name="x_axis_leg">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="0.001"/>
+            <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+        </inertial>
+    </link>
+    <link name="y_axis_leg">
+        <inertial>
+            <origin xyz="0 0 0" rpy="0 0 0"/>
+            <mass value="0.001"/>
+            <inertia ixx="0.00001" ixy="0" ixz="0" iyy="0.00001" iyz="0" izz="0.00001"/>
+        </inertial>
+    </link>
 
     <!-- Link: Upper Leg -->
     <link name="leg_upper">
         <inertial>
             <origin xyz="0 0 0" rpy="0 0 0"/>
-            <mass value="0.5"/>
+            <mass value="0.1"/>
             <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
         </inertial>
         <visual>
@@ -76,14 +88,12 @@
         <origin xyz="0 0 -0.15" rpy="0 0 0"/>
         <parent link="y_axis_leg"/>
         <child link="leg_upper"/>
-        <axis xyz="0 1 0"/>
     </joint>
 
-    <!-- Link: Lower Leg -->
     <link name="leg_lower">
         <inertial>
             <origin xyz="0 0 0" rpy="0 0 0"/>
-            <mass value="0.5"/>
+            <mass value="0.1"/>
             <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
         </inertial>
         <visual>
