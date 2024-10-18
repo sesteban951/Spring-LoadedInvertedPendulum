@@ -18,6 +18,9 @@
                   texuniform="true"/>
     </asset>  
 
+    <!-- Set the angles to be in radians -->
+    <compiler angle="radian" autolimits="true" eulerseq="zyx"/>
+
     <!-- Bodies -->
     <worldbody>
         <!-- Ground -->
