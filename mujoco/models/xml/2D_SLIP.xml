@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <mujoco model="3D_SLIP">
 
-    <!-- TODO: mess with iterations and ls_iterations -->
-    <!-- <option timestep="0.002" iterations="3" ls_iterations="5" solver="Newton">
+    <!-- Simualtor Parameters -->
+    <option timestep="0.002" iterations="3" ls_iterations="5" solver="Newton">
         <flag eulerdamp="disable"/>
-    </option> -->
+    </option>
 
     <!-- Specify the light settings -->
     <visual>
@@ -39,19 +39,15 @@
         <geom name="plane" type="plane" size="0.0 0.0 0.125" material="groundplane"/>
 
         <!-- COM Body -->
-        <body name="com" pos="0 0 0.65">
+        <body name="com" pos="0 0 0.6">
             <camera name="track" mode="trackcom" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1"/>
             <!-- <camera name="track" mode="targetbody" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1" target="com"/> -->
             <!-- <freejoint name="root" /> -->
             <joint name="root_x" type="slide" axis="1 0 0"/>
-            <joint name="root_y" type="slide" axis="0 1 0"/>
             <joint name="root_z" type="slide" axis="0 0 1"/>
 
             <!-- A light that tracks the CoM -->
             <light pos="0 0 3" dir="0 0 -1" directional="false" mode="trackcom"/>
-
-            <!-- ixx iyy izz ixy ixz iyz-->
-            <!-- <inertial mass="20.0" fullinertia=" 0.045 0.045 0.045 0.0 0.0 0.0" pos="0 0 0" /> -->
 
             <!-- CoM has sphere collisions but a fancy mesh visual-->
             <geom name="com_mesh" class="visual" mesh="com" type="mesh" rgba="1.0 0.424 0.047 1.0" />
@@ -59,7 +55,6 @@
 
             <!-- Upper Leg -->
             <body name="leg_upper" pos="0 0 -0.15">
-                <joint name="leg_roll" axis="1 0 0" pos="0 0 0.15" limited="true" range="-1.2 1.2"/>
                 <joint name="leg_pitch" axis="0 1 0" pos="0 0 0.15" limited="true" range="-1.2 1.2"/>
                 <geom name="leg_upper" class="visual" type="cylinder" density="0.5" size="0.025 0.15" rgba="0.2 0.2 0.2 0.5"/>
 
@@ -80,10 +75,9 @@
     </worldbody>
 
     <!-- Actuators -->
-    <!-- <actuator>
+    <actuator>
         <position name="leg_pitch" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_pitch" kp="0.1" dampratio="1"/>
-        <position name="leg_roll" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_roll" kp="0.1" dampratio="1"/>
-        <position name="leg_prismatic" ctrllimited="true" ctrlrange="-0.15 0.15" joint="leg_prismatic" kp="0.5" dampratio="1"/>
-    </actuator> -->
+        <position name="leg_prismatic" ctrllimited="true" ctrlrange="-0.15 0.15" joint="leg_prismatic" kp="1.0" dampratio="1"/>
+    </actuator>
 
 </mujoco>
