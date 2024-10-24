@@ -1,7 +1,6 @@
 import mujoco
 import numpy as np
 import glfw
-import time
 
 # Path to your MuJoCo XML model
 xml_path = "../models/xml/2D_SLIP.xml"
@@ -29,12 +28,12 @@ scene = mujoco.MjvScene(model, maxgeom=10000)
 context = mujoco.MjrContext(model, mujoco.mjtFontScale.mjFONTSCALE_150)
 
 # Frame skipping parameters
-frame_skip = 10  # Only render every so number of steps
+frame_skip = 7  # Only render every so number of steps
 step_counter = 0
 
 # Set the initial configuration of the robot
-qpos = np.array([0, 1.0, 0, 0])
-qvel = np.array([0, 0, 0, 0])
+qpos = np.array([0, 1.2, 0, 0])
+qvel = np.array([3.0, 0, 0, 0])
 data.qpos[:] = qpos
 data.qvel[:] = qvel
 
@@ -70,18 +69,69 @@ def update_camera_to_com():
     cam.elevation = -10  # Camera elevation angle (adjust as needed)
     cam.azimuth = 90  # Camera azimuth angle (adjust as needed)
 
+# Function to print contact information
+def get_contact_info():
+    
+    if data.ncon == 0:
+        return None
+    else:
+        for i in range(data.ncon):  # Loop through all contacts
+            contact = data.contact[i]
+            body_a = contact.geom1  # First body involved in the contact
+            body_b = contact.geom2  # Second body involved in the contact
+            contact_point_pos = contact.pos  # Contact point position
+            
+            # body_a_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, body_a)
+            # body_b_name = mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, body_b)
+            
+            # print(f"Contact {i + 1}:")
+            # print(f"  Body A: {body_a_name}, Body B: {body_b_name}")
+            # print(f"  Contact Point: {contact_point_pos}")
+
+            return contact_point_pos
+
+# Function to compute the hip torque
+def compute_hip_torque(qpos, qvel):
+
+    # get the current contact point if any
+    contact_point = get_contact_info()
+
+    # return 0 torque when you are on the ground
+    if contact_point is not None:
+        return 0.0
+    # otherwise, do the Raibert controller in the air
+    else:
+        # get the current leg state
+        theta_leg = qpos[2]
+        theta_dot_leg = qvel[2]
+
+        # get the current state in the air
+        px = qpos[0]
+        vx = qvel[0]
+
+        # calculate the desired leg angle
+        theta_des = 0.1 * (vx)
+        
+        # compute torque to achieve the desired leg angle
+        kp = 0.1
+        kd = 0.01
+        tau_des = kp * (theta_des - theta_leg) + kd * (0.0 - theta_dot_leg)
+
+        return tau_des
+
 # Simulation loop
 def run_simulation():
     global step_counter
     while not glfw.window_should_close(window):
-        # Step the simulation
-        mujoco.mj_step(model, data)
 
         # Update the camera to track the center of mass
         update_camera_to_com()
 
-        # Do control (optional)
-        # data.ctrl[0] = 0.2 * np.sin(data.time)
+        # Do simple Raibert Controller
+        data.ctrl[0] = compute_hip_torque(data.qpos, data.qvel)
+        
+        # Step the simulation
+        mujoco.mj_step(model, data)
 
         step_counter += 1
         if step_counter % frame_skip == 0:
