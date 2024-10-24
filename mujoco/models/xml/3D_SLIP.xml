@@ -1,10 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <mujoco model="3D_SLIP">
 
-    <!-- TODO: mess with iterations and ls_iterations -->
-    <!-- <option timestep="0.002" iterations="3" ls_iterations="5" solver="Newton">
+    <!-- Simualtor Parameters -->
+    <option timestep="0.002" iterations="5" ls_iterations="5" solver="Newton">
         <flag eulerdamp="disable"/>
-    </option> -->
+    </option>
 
     <!-- Specify the light settings -->
     <visual>
@@ -38,20 +38,19 @@
         <!-- Ground -->
         <geom name="plane" type="plane" size="0.0 0.0 0.125" material="groundplane"/>
 
-        <!-- COM Body -->
-        <body name="com" pos="0 0 0.65">
-            <camera name="track" mode="trackcom" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1"/>
-            <!-- <camera name="track" mode="targetbody" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1" target="com"/> -->
-            <!-- <freejoint name="root" /> -->
-            <joint name="root_x" type="slide" axis="1 0 0"/>
-            <joint name="root_y" type="slide" axis="0 1 0"/>
-            <joint name="root_z" type="slide" axis="0 0 1"/>
+        <!-- Origin Visual -->
+        <geom name="origin_sphere" type="sphere" size="0.025" pos="0 0 0" rgba="1 0 0 1" conaffinity="0" contype="0"/>
+
+        <!-- Robot -->
+        <body name="com" pos="0 0 1.0">
 
             <!-- A light that tracks the CoM -->
             <light pos="0 0 3" dir="0 0 -1" directional="false" mode="trackcom"/>
 
-            <!-- ixx iyy izz ixy ixz iyz-->
-            <!-- <inertial mass="20.0" fullinertia=" 0.045 0.045 0.045 0.0 0.0 0.0" pos="0 0 0" /> -->
+            <!-- Floating Base -->
+            <joint name="root_x" type="slide" axis="1 0 0"/>
+            <joint name="root_y" type="slide" axis="0 1 0"/>
+            <joint name="root_z" type="slide" axis="0 0 1"/>
 
             <!-- CoM has sphere collisions but a fancy mesh visual-->
             <geom name="com_mesh" class="visual" mesh="com" type="mesh" rgba="1.0 0.424 0.047 1.0" />
@@ -59,14 +58,14 @@
 
             <!-- Upper Leg -->
             <body name="leg_upper" pos="0 0 -0.15">
-                <joint name="leg_roll" axis="1 0 0" pos="0 0 0.15" limited="true" range="-1.2 1.2"/>
-                <joint name="leg_pitch" axis="0 1 0" pos="0 0 0.15" limited="true" range="-1.2 1.2"/>
+                <joint name="leg_roll" axis="1 0 0" pos="0 0 0.15" limited="true" range="-1.5 1.5"/>
+                <joint name="leg_pitch" axis="0 1 0" pos="0 0 0.15" limited="true" range="-1.5 1.5"/>
                 <geom name="leg_upper" class="visual" type="cylinder" density="0.5" size="0.025 0.15" rgba="0.2 0.2 0.2 0.5"/>
 
                 <!-- Lower Leg -->
                 <body name="leg_lower" pos="0 0 -0.15">
                     <!-- Spring stiffness here? -->
-                    <joint name="leg_prismatic" axis="0 0 1" type="slide" limited="true" range="-0.15 0.15"/>
+                    <joint name="leg_prismatic" axis="0 0 1" type="slide" limited="true" range="-0.15 0.15" stiffness="3.0" damping="0.001" frictionloss="0"/>
                     <geom name="leg_lower" class="visual" type="cylinder" density="0.5" size="0.015 0.15" rgba="1.0 1.0 1.0 0.5"/>
 
                     <!-- Foot -->
@@ -80,10 +79,12 @@
     </worldbody>
 
     <!-- Actuators -->
-    <!-- <actuator>
-        <position name="leg_pitch" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_pitch" kp="0.1" dampratio="1"/>
-        <position name="leg_roll" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_roll" kp="0.1" dampratio="1"/>
-        <position name="leg_prismatic" ctrllimited="true" ctrlrange="-0.15 0.15" joint="leg_prismatic" kp="0.5" dampratio="1"/>
-    </actuator> -->
+    <actuator>
+        <motor name="leg_roll" joint="leg_roll" ctrllimited="false"/>
+        <motor name="leg_pitch" joint="leg_pitch" ctrllimited="false"/>
+        <!-- <position name="leg_roll" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_roll" kp="0.1" dampratio="1"/> -->
+        <!-- <position name="leg_pitch" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_pitch" kp="0.1" dampratio="1"/> -->
+        <!-- <position name="leg_prismatic" ctrllimited="true" ctrlrange="-0.15 0.15" joint="leg_prismatic" kp="0.5" dampratio="1"/> -->
+    </actuator>
 
 </mujoco>

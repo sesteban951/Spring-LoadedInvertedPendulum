@@ -3,7 +3,7 @@ import numpy as np
 import glfw
 
 # Path to your MuJoCo XML model
-xml_path = "../models/xml/2D_SLIP.xml"
+xml_path = "../models/xml/3D_SLIP.xml"
 
 # Load the model
 model = mujoco.MjModel.from_xml_path(xml_path)
@@ -32,8 +32,12 @@ frame_skip = 7  # Only render every so number of steps
 step_counter = 0
 
 # Set the initial configuration of the robot
-qpos = np.array([0, 1.2, 0, 0])
-qvel = np.array([3.0, 0, 0, 0])
+qpos = np.array([0, 0, 1.0, # pos x, pos y, leg angle
+                 0,  0,     # leg roll, leg pitch
+                 0])        # prismatic position
+qvel = np.array([0, 0, 0,   # pos x, pos y, leg angle
+                 0,  0,     # leg roll, leg pitch
+                 0])        # prismatic position
 data.qpos[:] = qpos
 data.qvel[:] = qvel
 
@@ -102,20 +106,26 @@ def compute_hip_torque(qpos, qvel):
     # otherwise, do the Raibert controller in the air
     else:
         # get the current leg state
-        theta_leg = qpos[2]
-        theta_dot_leg = qvel[2]
+        pos_leg_roll = qpos[3]
+        pos_leg_pitch = qpos[4]
 
         # get the current state in the air
         px = qpos[0]
+        py = qpos[1]
         vx = qvel[0]
+        vy = qvel[1]
 
         # calculate the desired leg angle
-        theta_des = 0.1 * (vx)
+        kp_raibert = 0.0
+        kd_raibert = 0.5
+        vx_des = 0.0
+        px_des = 0.0
+        theta_des = kp_raibert * (px - px_des) + kd_raibert * (vx - vx_des)
         
         # compute torque to achieve the desired leg angle
         kp = 0.1
         kd = 0.01
-        tau_des = kp * (theta_des - theta_leg) + kd * (0.0 - theta_dot_leg)
+        tau_des = kp * (theta_leg - theta_des) + kd * (theta_dot_leg)
 
         return tau_des
 
