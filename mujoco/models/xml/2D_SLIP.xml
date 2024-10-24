@@ -2,7 +2,7 @@
 <mujoco model="3D_SLIP">
 
     <!-- Simualtor Parameters -->
-    <option timestep="0.002" iterations="3" ls_iterations="5" solver="Newton">
+    <option timestep="0.002" iterations="5" ls_iterations="5" solver="Newton">
         <flag eulerdamp="disable"/>
     </option>
 
@@ -40,9 +40,6 @@
 
         <!-- COM Body -->
         <body name="com" pos="0 0 0.6">
-            <camera name="track" mode="trackcom" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1"/>
-            <!-- <camera name="track" mode="targetbody" pos="0 -3 0.3" xyaxes="1 0 0 0 0 1" target="com"/> -->
-            <!-- <freejoint name="root" /> -->
             <joint name="root_x" type="slide" axis="1 0 0"/>
             <joint name="root_z" type="slide" axis="0 0 1"/>
 
@@ -61,7 +58,7 @@
                 <!-- Lower Leg -->
                 <body name="leg_lower" pos="0 0 -0.15">
                     <!-- Spring stiffness here? -->
-                    <joint name="leg_prismatic" axis="0 0 1" type="slide" limited="true" range="-0.15 0.15"/>
+                    <joint name="leg_prismatic" axis="0 0 1" type="slide" limited="true" range="-0.15 0.15" stiffness="5.0" damping="0.0001" frictionloss="0"/>
                     <geom name="leg_lower" class="visual" type="cylinder" density="0.5" size="0.015 0.15" rgba="1.0 1.0 1.0 0.5"/>
 
                     <!-- Foot -->
@@ -76,8 +73,10 @@
 
     <!-- Actuators -->
     <actuator>
-        <position name="leg_pitch" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_pitch" kp="0.1" dampratio="1"/>
-        <position name="leg_prismatic" ctrllimited="true" ctrlrange="-0.15 0.15" joint="leg_prismatic" kp="1.0" dampratio="1"/>
+        <!-- <position name="leg_pitch" ctrllimited="true" ctrlrange="-1.0 1.0" joint="leg_pitch" kp="0.1" dampratio="1"/> -->
+        <!-- <position name="leg_prismatic" ctrllimited="true" ctrlrange="-0.15 0.15" joint="leg_prismatic"/>  -->
+        <motor name="leg_pitch" joint="leg_pitch" ctrllimited="false"/>
+        <!-- <motor name="leg_prismatic" joint="leg_prismatic" ctrllimited="false"/> -->
     </actuator>
 
 </mujoco>
