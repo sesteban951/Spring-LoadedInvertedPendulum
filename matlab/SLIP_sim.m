@@ -13,17 +13,18 @@ params.alpha_max = alpha_max_deg * (pi/180);  % max foot angle [rad]
 
 % trajectory parameters
 params.traj_type = "vel"; % "pos" for constant velocity and "vel" for constant position 
-params.v_des = 1.0;       % converge to a fixed velocity
+params.v_des = 1.5;       % converge to a fixed velocity
 params.p_des = 1.0;       % converge to a fixed position
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 animation = 1;     % full SLIP replay
+save_video = 1;    % save the video
 
 % plotting parameters
 realtime_rate = 1.0;
-n_points = 50;
-max_num_transitions = 60;
+n_points = 45;
+max_num_transitions = 40;
 
 dom = 0;   % plot ground and flight phases
 orbit = 0;    % plot orbit plots
@@ -32,14 +33,14 @@ poincare = 0; % plot the poincare map results
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % sim params
-freq = 200;
+freq = 150;
 dt = 1/freq;
 tspan = 0:dt:3.0;  % to allow for switching before timeout
 
 % initial conditions (always start in flight)
 x0 = [0.0;   % x
-      1.0;   % z
-      0.0;   % x_dot
+      1.25;   % z
+      0.5;   % x_dot
       0.0];  % z_dot
 domain = "flight";
 
@@ -201,7 +202,6 @@ if poincare == 1
 end
 
 if animation == 1
-
     % create a new figure
     figure('Name', 'SLIP Simulation');
     hold on;
@@ -215,7 +215,6 @@ if animation == 1
     z_max = max(X(:,2)) + 0.1;
     ylim([z_min, z_max]);
 
-
     % draw the desired trajectory
     if params.traj_type == "pos"
         target = xline(params.p_des, '--', 'Target', 'Color', "k", 'LineWidth', 1.5);
@@ -227,6 +226,14 @@ if animation == 1
     % Number of points to record
     com_history = [];      % Initialize an empty array to store the last 20 COM points
     com_history_plot = []; % Initialize a variable to store the plot handle for the history
+
+    % Video writer setup
+    if save_video == 1
+        video_filename = 'slip_simulation_video.mp4';  % Set your video file name
+        v = VideoWriter(video_filename, 'Motion JPEG AVI');  % Create a video writer object
+        v.FrameRate = 1/realtime_rate;  % Adjust the frame rate based on your animation speed
+        open(v);  % Open the video file for writing
+    end
 
     tic;
     t_now = T(1);
@@ -260,12 +267,18 @@ if animation == 1
         
         % current time
         plot_title = sprintf("Time: %.2f\n apex = [%.2f, %.2f]", T(ind) * realtime_rate, X(ind,2), X(ind,3));
-        title(plot_title,'FontSize', 14)   
+        title(plot_title,'FontSize', 14);   
         
         % adjust the x_axis width
         x_min = X(ind,1) - 1.0;
         x_max = X(ind,1) + 1.0;
         xlim([x_min, x_max]);
+
+        % Capture the frame and write to video
+        if save_video == 1
+            frame = getframe(gcf);  % Capture current figure frame
+            writeVideo(v, frame);   % Write frame to video
+        end
 
         drawnow;
 
@@ -276,16 +289,21 @@ if animation == 1
 
         % increment the index
         if ind+1 == length(T)
-            break
+            break;
         else
             ind = ind + 1;
-            % delete(target);
             delete(pole);
             delete(foot);
             delete(com);
         end
     end
+
+    % Close video writer
+    if save_video == 1
+        close(v);
+    end
 end
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % DYNAMICS
