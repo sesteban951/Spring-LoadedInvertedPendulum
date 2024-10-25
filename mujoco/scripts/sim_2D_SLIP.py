@@ -32,7 +32,7 @@ frame_skip = 7  # Only render every so number of steps
 step_counter = 0
 
 # Set the initial configuration of the robot
-qpos = np.array([0, 1.5, 0, 0])
+qpos = np.array([-5, 1.5, 0, 0])
 qvel = np.array([3.0, 0, 0, 0])
 data.qpos[:] = qpos
 data.qvel[:] = qvel

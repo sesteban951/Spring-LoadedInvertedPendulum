@@ -28,15 +28,15 @@ scene = mujoco.MjvScene(model, maxgeom=10000)
 context = mujoco.MjrContext(model, mujoco.mjtFontScale.mjFONTSCALE_150)
 
 # Frame skipping parameters
-frame_skip = 7  # Only render every so number of steps
+frame_skip = 10  # Only render every so number of steps
 step_counter = 0
 
 # Set the initial configuration of the robot
-qpos = np.array([0, 0, 1.0, # pos x, pos y, leg angle
-                 0,  0,     # leg roll, leg pitch
+qpos = np.array([0, 0, 1.5, # px, py, pz
+                 0.0,  0.0,     # leg roll, leg pitch
                  0])        # prismatic position
-qvel = np.array([0, 0, 0,   # pos x, pos y, leg angle
-                 0,  0,     # leg roll, leg pitch
+qvel = np.array([1.0, 1.0, 0,   # vx, vy, vz
+                 0.0,  0.0,     # leg roll, leg pitch
                  0])        # prismatic position
 data.qpos[:] = qpos
 data.qvel[:] = qvel
@@ -100,34 +100,37 @@ def compute_hip_torque(qpos, qvel):
     # get the current contact point if any
     contact_point = get_contact_info()
 
-    # return 0 torque when you are on the ground
+    # return 0 torque when you are in contact
     if contact_point is not None:
-        return 0.0
+        return 0.0, 0.0
+
     # otherwise, do the Raibert controller in the air
     else:
         # get the current leg state
-        pos_leg_roll = qpos[3]
-        pos_leg_pitch = qpos[4]
+        pos_leg = [qpos[3], qpos[4]]  # roll, pitch
+        vel_leg = [qvel[3], qvel[4]]  # roll, pitch
 
         # get the current state in the air
-        px = qpos[0]
-        py = qpos[1]
-        vx = qvel[0]
-        vy = qvel[1]
+        pos_com = [qpos[0], qpos[1]]  # px, py
+        vel_com = [qvel[0], qvel[1]]  # vx, vy
 
-        # calculate the desired leg angle
-        kp_raibert = 0.0
-        kd_raibert = 0.5
-        vx_des = 0.0
-        px_des = 0.0
-        theta_des = kp_raibert * (px - px_des) + kd_raibert * (vx - vx_des)
+        # desired state
+        pos_com_des = [0.0, 0.0]  # desired px, py
+        vel_com_des = [0.0, 0.0]  # desired vx, vy
+
+        # calculate the desired leg angles
+        kp_raibert = 0.03
+        kd_raibert = 0.15
+        roll_des = kp_raibert * (pos_com[1] - pos_com_des[1]) + kd_raibert * (vel_com[1] - vel_com_des[1])
+        pitch_des = kp_raibert * (pos_com[0] - pos_com_des[0]) + kd_raibert * (vel_com[0] - vel_com_des[0])
         
         # compute torque to achieve the desired leg angle
-        kp = 0.1
-        kd = 0.01
-        tau_des = kp * (theta_leg - theta_des) + kd * (theta_dot_leg)
+        kp_tau = 0.1
+        kd_tau = 0.01
+        tau_roll = kp_tau * (roll_des - pos_leg[0]) + kd_tau * (0.0 - vel_leg[0])
+        tau_pitch = kp_tau * (pitch_des - pos_leg[1]) + kd_tau * (0.0 - vel_leg[1])
 
-        return tau_des
+        return tau_roll, tau_pitch
 
 # Simulation loop
 def run_simulation():
@@ -138,7 +141,7 @@ def run_simulation():
         update_camera_to_com()
 
         # Do simple Raibert Controller
-        data.ctrl[0] = compute_hip_torque(data.qpos, data.qvel)
+        data.ctrl[0], data.ctrl[1] = compute_hip_torque(data.qpos, data.qvel)
         
         # Step the simulation
         mujoco.mj_step(model, data)

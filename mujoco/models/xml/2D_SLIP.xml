@@ -2,7 +2,7 @@
 <mujoco model="2D_SLIP">
 
     <!-- Simualtor Parameters -->
-    <option timestep="0.002" iterations="5" ls_iterations="5" solver="Newton">
+    <option timestep="0.002" iterations="5" ls_iterations="5" solver="Newton" gravity="0 0 -9.81">
         <flag eulerdamp="disable"/>
     </option>
 
@@ -57,7 +57,7 @@
 
             <!-- Upper Leg -->
             <body name="leg_upper" pos="0 0 -0.15">
-                <joint name="leg_pitch" axis="0 -1 0" pos="0 0 0.15" limited="true" range="-1.5 1.5"/>
+                <joint name="leg_pitch" axis="0 -1 0" pos="0 0 0.15" limited="true" range="-1.2 1.2"/>
                 <geom name="leg_upper" class="visual" type="cylinder" density="0.5" size="0.025 0.15" rgba="0.2 0.2 0.2 0.5"/>
 
                 <!-- Lower Leg -->
