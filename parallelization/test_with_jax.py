@@ -5,7 +5,6 @@ from jax import lax
 from jax.lib import xla_bridge
 from jax import jit, vmap
 import jax.numpy as jnp
-import jax.scipy as jsp
 
 from functools import partial
 import time
@@ -76,7 +75,7 @@ def VanDerPol_jit(t,x) -> jnp.ndarray:
     Nonlinear dynamics of the Van der Pol oscillator
     """
     # Parameters
-    mu = 1.0
+    mu = 10
 
     # Van der Pol oscillator
     xdot = jnp.array([
@@ -118,7 +117,7 @@ if __name__ == "__main__":
     mean = test_jax()
 
     # Forward propagate dynamics
-    dt = 0.02
+    dt = 0.05
     N = 100
     x0 = jnp.array([1.0, 1.0])
 
@@ -127,7 +126,7 @@ if __name__ == "__main__":
 
     # solve the ODE several times sequentially
     t_sum = 0.0
-    num_sims = 4000
+    num_sims = 100
     for i in range(num_sims):    
         t0 = time.time()
         sol = fwd_propagate_dyn_jit(x0, dt, N).block_until_ready()
