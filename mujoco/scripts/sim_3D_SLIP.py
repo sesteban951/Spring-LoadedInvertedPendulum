@@ -13,7 +13,7 @@ data = mujoco.MjData(model)
 def init_glfw():
     if not glfw.init():
         raise Exception("Could not initialize GLFW")
-    window = glfw.create_window(800, 600, "MuJoCo Simulation", None, None)
+    window = glfw.create_window(1920, 1080, "MuJoCo Simulation", None, None)
     glfw.make_context_current(window)
     return window
 
@@ -28,7 +28,7 @@ scene = mujoco.MjvScene(model, maxgeom=10000)
 context = mujoco.MjrContext(model, mujoco.mjtFontScale.mjFONTSCALE_150)
 
 # Frame skipping parameters
-frame_skip = 10  # Only render every so number of steps
+frame_skip = 15  # Only render every so number of steps
 step_counter = 0
 
 # Set the initial configuration of the robot
