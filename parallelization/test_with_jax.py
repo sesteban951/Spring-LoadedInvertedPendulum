@@ -69,7 +69,7 @@ def test_jax() -> float:
 ######################################################################################
 
 # Van der Pol oscillator dynamics to test things out
-@jit
+@jit # TODO: could get rid of this jit and then run just as fast. 
 def VanDerPol_jit(t,x) -> jnp.ndarray:
     """
     Nonlinear dynamics of the Van der Pol oscillator
@@ -129,7 +129,8 @@ if __name__ == "__main__":
     num_sims = 100
     for i in range(num_sims):    
         t0 = time.time()
-        sol = fwd_propagate_dyn_jit(x0, dt, N).block_until_ready()
+        sol = fwd_propagate_dyn_jit(x0, dt, N).block_until_ready() # TODO: can get rid of block_until_ready()
+                                                                   #     only use this when you must need to wait  
         t1 = time.time()
         t_sum += t1-t0
     print(f"Average time (sequentially): {t_sum/num_sims}")
@@ -149,7 +150,7 @@ if __name__ == "__main__":
     print(f"Total time (parallel): {t1 - t0}")
 
     # retreive the jax array as a numpy array
-    sol = np.array(sol, copy=False)
+    sol = np.array(sol, copy=False) # TODO: transferring from GPU to CPU is expensive. Try doing all in jax data types
     data = np.hstack((np.linspace(0, dt*(N-1), N).reshape(-1, 1), sol))
 
     # retreive the last batched solution
