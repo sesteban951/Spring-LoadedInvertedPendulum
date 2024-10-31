@@ -121,7 +121,7 @@ if __name__ == "__main__":
     N = 100
     x0 = jnp.array([1.0, 1.0])
 
-    # TODO: investigate why I need a warm start to get to a fast speed
+    # NOTE: I need to do a quick equry to have jit compile the function
     sol = fwd_propagate_dyn_jit(x0, dt, N).block_until_ready()
 
     # solve the ODE several times sequentially
@@ -139,7 +139,7 @@ if __name__ == "__main__":
     x0_batch = jnp.array([[1.0, 1.0]] * num_sims)  # Ensure x0_batch is shaped correctly
     fwd_propagate_dyn_vmap = vmap(fwd_propagate_dyn_jit, in_axes=(0, None, None))
 
-    # TODO: investigate why I need a warm start to get to a fast speed
+    # NOTE: I need to do a quick equry to have jit compile the function
     sol_batch = fwd_propagate_dyn_vmap(x0_batch, dt, N).block_until_ready()
 
     t0 = time.time()

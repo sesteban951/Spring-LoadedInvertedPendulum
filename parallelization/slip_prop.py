@@ -13,9 +13,10 @@ import matplotlib.pyplot as plt
 
 ######################################################################################
 # DYNAMICS
+######################################################################################
 
-# SLIP flight dynamics
-def slip_flight_fwd_prop(x0, dt, alpha):
+# SLIP flight dynamics (cartesian coordinates)
+def slip_flight_fwd_prop(x0, dt, alpha) -> np.array:
     """
     Simulate the flight phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -55,33 +56,62 @@ def slip_flight_fwd_prop(x0, dt, alpha):
         x_t[i, 2] = vx_0                              # vel x       
         x_t[i, 3] = vz_0 + g * t                      # vel z
 
-# SLIP ground dynamics
-def slip_ground_dyn(x0, dt):
+# SLIP ground dynamics (polar coordinates)
+def slip_ground_dyn(xk) -> np.array:
 
-    # 
-
-# SLIP ground dynamics
-def slip_ground_dyn_fwd_prop(x0, dt):
-    """
-    Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
-    """
     # system parameters
     m = 10.0   # [kg]    mass
     g = 9.81   # [m/s^2] gravity
     l = 1.0    # [m]     leg free length
     k = 1000   # [N/m]   leg stiffness
 
-    # unpack the initial state
-    r_0 = x0[0]
-    th_0 = x0[1]
-    rdot_0 = x0[2]
-    thdot_0 = x0[3]
+    # polar state, x = [r, theta, rdot, thetadot]
+    r = xk[0]
+    theta = xk[1]
+    r_dot = xk[2]
+    theta_dot = xk[3]
 
-    # compute the impact height and time until impact
-    N = 15
-    t_span = np.arange(0, N * dt, dt)
+    # ground phase dynamics
+    xdot = np.array([
+        r_dot,
+        theta_dot,
+        r * theta_dot**2 - g * np.cos(theta) + (k/m) * (l - r),
+        -(2/r) * r_dot*theta_dot + (g/r) * np.sin(theta)
+    ])
+
+    return xdot
+
+# SLIP ground dynamics
+def slip_ground_dyn_fwd_prop(x0, dt):
+    """
+    Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
+    """
+    # container for the trajectory
+    N = 20
+    x_t = np.zeros((N, 4))
+
+    # do RK2 integration
+    xk = x0
+    x_t[0, :] = xk    # TODO: check that this is flat
+    for i in range(N):
+        # RK2 integration
+        f1 = slip_ground_dyn(x0)
+        f2 = slip_ground_dyn(x0 + 0.5 * dt * f1)
+        xk = xk + dt * f2
+        x_t[i, :] = xk
+    
+    return x_t
 
 
+######################################################################################
+# COORDINATE TRANSFORMATIONS
+######################################################################################
+
+# Cartesian to polar coordinate
+def cart_2_pol(x_cart, params, alpha) -> np.array:
+
+    # flight state, x = [x, z, xdot, zdot]
+    
 
 ######################################################################################
 # MAIN
