@@ -20,6 +20,8 @@ def VanDerPol(t, x) -> np.ndarray:
 
     return xdot
 
+######################################################################################
+
 if __name__ == "__main__":
 
     # Forward propagate dynamics
