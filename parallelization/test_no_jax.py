@@ -25,7 +25,7 @@ def VanDerPol(t, x) -> np.ndarray:
 if __name__ == "__main__":
 
     # Forward propagate dynamics
-    dt = 0.05
+    dt = 0.02
     N = 100
     t0, tf = 0, dt * (N - 1)  # Final time step is adjusted by dt*N
     t_span = (t0, tf)
@@ -34,7 +34,7 @@ if __name__ == "__main__":
 
     # Solve ODE several times sequentially
     t_sum = 0.0
-    num_sims = 100
+    num_sims = 5000
     for i in range(num_sims):
         t0 = time.time()
         sol = solve_ivp(VanDerPol, t_span, x0, t_eval=t_eval, method="RK45")

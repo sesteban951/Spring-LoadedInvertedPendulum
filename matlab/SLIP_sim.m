@@ -19,7 +19,7 @@ params.p_des = 1.0;       % converge to a fixed position
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 animation = 1;     % full SLIP replay
-save_video = 1;    % save the video
+save_video = 0;    % save the video
 
 % plotting parameters
 realtime_rate = 1.0;
@@ -96,6 +96,8 @@ while num_transitions <= max_num_transitions
                       x_flight(i,2) - params.l0 * cos(alpha_)];
             F = [F; p_foot'];
         end
+
+        alpha
 
         % set new initial condition
         x0 = x_flight(end,:);

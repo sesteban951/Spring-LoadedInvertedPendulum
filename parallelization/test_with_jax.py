@@ -9,6 +9,8 @@ import jax.numpy as jnp
 from functools import partial
 import time
 
+# from dataclasses import dataclass
+
 ######################################################################################
 
 # TODO: Consider making a data class to hold everything
@@ -117,7 +119,7 @@ if __name__ == "__main__":
     mean = test_jax()
 
     # Forward propagate dynamics
-    dt = 0.05
+    dt = 0.02
     N = 100
     x0 = jnp.array([1.0, 1.0])
 
@@ -126,7 +128,7 @@ if __name__ == "__main__":
 
     # solve the ODE several times sequentially
     t_sum = 0.0
-    num_sims = 100
+    num_sims = 5000
     for i in range(num_sims):    
         t0 = time.time()
         sol = fwd_propagate_dyn_jit(x0, dt, N).block_until_ready()
