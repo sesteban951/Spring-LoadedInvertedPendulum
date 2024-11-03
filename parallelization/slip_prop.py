@@ -55,23 +55,38 @@ def slip_ground_dyn_fwd_prop(x0, dt, params) -> np.array:
     """
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
-    # container for the trajectory
-    N = 200
-    t_span = np.arange(0, N*dt, dt)
-    x_t = np.zeros((N, 4))
+    # ensure the SLIP hasn't fallen over
+    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase."
 
-    # do RK2 integration
+    # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
+    x_t = []
+    x_t.append(x0)    
+
+    # Do Integration until switching conditions are met
+    k = 0
     xk = x0
-    x_t[0, :] = xk    # TODO: check that this is flat
-    for i in range(N):
-        # RK2 integration
-        f1 = slip_ground_dyn(x0, params)
-        f2 = slip_ground_dyn(x0 + 0.5 * dt * f1, params)
+    dot_product, leg_uncompressed = False, False
+    while not (leg_uncompressed * dot_product):    
+
+        # RK2 integration (in polar coordinates)
+        f1 = slip_ground_dyn(xk, params)
+        f2 = slip_ground_dyn(xk + 0.5 * dt * f1, params)
         xk = xk + dt * f2
-        x_t[i, :] = xk
+        x_t.append(xk)
+
+        # check take-off guard conditions
+        x_cart = polar_to_cartesian(xk, params)
+        leg_pos = np.array([x_cart[0], x_cart[1]])
+        leg_vel = np.array([x_cart[2], x_cart[3]])
+        dot_product = (np.dot(leg_pos, leg_vel) >= 0)
+        leg_uncompressed = (xk[0] >= params.l0)
+
+        # increment the counter
+        k += 1
 
     # domain information (1 for ground phase)
-    D_t = np.ones((N, 1))
+    t_span = np.arange(0, k*dt, dt)
+    D_t = np.ones((k, 1))
 
     return t_span, x_t, D_t
 
@@ -88,7 +103,10 @@ def slip_flight_fwd_prop(x0, dt, alpha, params) -> np.array:
     vx_0 = x0[2]
     vz_0 = x0[3]
 
-    # compute the impact height and time until impact
+    # ensure that the COM is above the ground
+    assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
+
+    # Guard Condition: compute the impact height and time until impact
     pz_impact = params.l0 * np.cos(alpha)
     a = 0.5 * params.g
     b = - vz_0
@@ -106,11 +124,18 @@ def slip_flight_fwd_prop(x0, dt, alpha, params) -> np.array:
 
     # create a trajectory vector
     x_t = np.zeros((len(t_span), 4))
+
+    # simulate the flight phase
     for i, t in enumerate(t_span):
-        x_t[i, 0] = px_0 + vx_0 * t                              # pos x
+
+        # update the state
+        x_t[i, 0] = px_0 + vx_0 * t                          # pos x
         x_t[i, 1] = pz_0 + vz_0 * t - 0.5 * params.g * t**2  # pos z
-        x_t[i, 2] = vx_0                                         # vel x       
+        x_t[i, 2] = vx_0                                     # vel x       
         x_t[i, 3] = vz_0 + params.g * t                      # vel z
+
+        # check that the COM is above the ground
+        assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
 
     # Domain information (0 for flight phase)
     D_t = np.zeros((len(t_span), 1))
@@ -170,10 +195,10 @@ def polar_to_cartesian(x_polar, params) -> np.array:
 if __name__ == "__main__":
 
     # define the sytem parameters
-    sys_params = slip_params(m  = 10.0,   # mass [kg]
-                             l0 = 1.0,    # leg free length [m]
+    sys_params = slip_params(m  = 1.0,    # mass [kg]
+                             l0 = 1.0,     # leg free length [m]
                              k  = 1000.0, # leg stiffness [N/m]
-                             g  = 9.81)   # gravity [m/s^2]
+                             g  = 9.81)    # gravity [m/s^2]
 
     # initial state (cartesian coordinates)
     # x0 = np.array([0.0,   # px
@@ -185,10 +210,10 @@ if __name__ == "__main__":
     # t_flight, xt_flight, D_t = slip_flight_fwd_prop(x0, dt, alpha, sys_params)
 
     # initial state (polar coordinates)
-    x0 = np.array([1.0,   # r
-                   0.0,   # theta
+    x0 = np.array([0.9,   # r
+                   0.1,   # theta
                    0.0,   # rdot
-                   0.5]) # thetadot
+                   0.0])  # thetadot
     dt = 0.01
     t_span, x_t, D_t = slip_ground_dyn_fwd_prop(x0, dt, sys_params)
 
@@ -198,8 +223,9 @@ if __name__ == "__main__":
 
     # plot the positoins
     plt.figure()
+    plt.plot(0, 0, 'ko')
     plt.plot(x_t[:, 0], x_t[:, 1])
     plt.plot(x_t[0, 0], x_t[0, 1], 'go')
     plt.plot(x_t[-1, 0], x_t[-1, 1], 'rx')
-    plt.plot(0, 0, 'ko')
+    plt.grid()
     plt.show()
