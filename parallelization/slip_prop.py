@@ -1,14 +1,6 @@
 import numpy as np
 import scipy as sp
 
-import jax
-from jax import lax
-from jax.lib import xla_bridge
-from jax import jit, vmap
-import jax.numpy as jnp
-
-from functools import partial
-import time
 import matplotlib.pyplot as plt
 
 from dataclasses import dataclass
@@ -30,7 +22,8 @@ class slip_params:
 ######################################################################################
 
 # SLIP ground dynamics (polar coordinates)
-def slip_ground_dyn(xk, params) -> np.array:
+def slip_ground_dyn(xk: np.array, 
+                    params: slip_params) -> np.array:
     """
     Closed form dynamics for the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -51,7 +44,9 @@ def slip_ground_dyn(xk, params) -> np.array:
     return xdot
 
 # SLIP ground dynamics
-def slip_ground_dyn_fwd_prop(x0, dt, params) -> np.array:
+def slip_ground_fwd_prop(x0: np.array, 
+                         dt: float, 
+                         params:float) -> np.array:
     """
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -62,17 +57,17 @@ def slip_ground_dyn_fwd_prop(x0, dt, params) -> np.array:
     x_t = []
     x_t.append(x0)    
 
-    # Do Integration until switching conditions are met
+    # do Integration until switching conditions are met
     k = 0
     xk = x0
     dot_product, leg_uncompressed = False, False
-    while not (leg_uncompressed * dot_product):    
+    while not (leg_uncompressed * dot_product): # TODO: consider better switching detection
 
         # RK2 integration (in polar coordinates)
         f1 = slip_ground_dyn(xk, params)
         f2 = slip_ground_dyn(xk + 0.5 * dt * f1, params)
         xk = xk + dt * f2
-        x_t.append(xk)
+        x_t.append(xk) #  TODO: figure out a static size for the container. Dynamic = bad
 
         # check take-off guard conditions
         x_cart = polar_to_cartesian(xk, params)
@@ -84,14 +79,23 @@ def slip_ground_dyn_fwd_prop(x0, dt, params) -> np.array:
         # increment the counter
         k += 1
 
+    # convert the trajectory to a numpy array
+    N = len(x_t)
+    x_t = np.array(x_t)
+
     # domain information (1 for ground phase)
-    t_span = np.arange(0, k*dt, dt)
-    D_t = np.ones((k, 1))
+    D_t = np.ones((N, 1))
+
+    # time span infomration
+    t_span = np.linspace(0, (N-1)*dt, N)
 
     return t_span, x_t, D_t
 
 # SLIP flight dynamics (cartesian coordinates)
-def slip_flight_fwd_prop(x0, dt, alpha, params) -> np.array:
+def slip_flight_fwd_prop(x0: np.array, 
+                         dt: float, 
+                         alpha: float, 
+                         params: slip_params) -> np.array:
     """
     Simulate the flight phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -147,8 +151,12 @@ def slip_flight_fwd_prop(x0, dt, alpha, params) -> np.array:
 ######################################################################################
 
 # Cartesian to polar coordinate
-def carteisan_to_polar(x_cart, alpha, params) -> np.array:
-
+def carteisan_to_polar(x_cart: np.array, 
+                       alpha: float, 
+                       params: slip_params) -> np.array:
+    """
+    Convert the cartesian coordinates to polar coordinates.
+    """
     # flight state, x = [x, z, xdot, zdot]
     px = x_cart[0]
     pz = x_cart[1]
@@ -165,15 +173,19 @@ def carteisan_to_polar(x_cart, alpha, params) -> np.array:
     z = pz_com - pz_foot
 
     # full state in polar coordinates
-    r = np.sqrt(x**2 + z**2)       # leg length
-    th = np.arctan2(x, z)          # leg angle
-    r_dot = (x * vx + z * vz) / r  # leg length rate
+    r = np.sqrt(x**2 + z**2)           # leg length
+    th = np.arctan2(x, z)              # leg angle
+    r_dot = (x * vx + z * vz) / r      # leg length rate
     th_dot = (z * vx - x * vz) / r**2  # leg angle rate
 
     return np.array([r, th, r_dot, th_dot])
 
-def polar_to_cartesian(x_polar, params) -> np.array:
-
+# Polar to Cartesian coordiante
+def polar_to_cartesian(x_polar: np.array, 
+                       params: slip_params) -> np.array:
+    """
+    Convert the polar coordinates to cartesian coordinates.
+    """
     # polar state, x = [r, theta, rdot, thetadot]
     r = x_polar[0]
     theta = x_polar[1]
@@ -181,8 +193,8 @@ def polar_to_cartesian(x_polar, params) -> np.array:
     theta_dot = x_polar[3]
 
     # full state in cartesian coordintes
-    px = r * np.sin(theta)  # COM position x
-    pz = r * np.cos(theta)  # COM position z
+    px = r * np.sin(theta)      # COM position x
+    pz = r * np.cos(theta)      # COM position z
     vx = r_dot * np.sin(theta) + r * theta_dot * np.cos(theta)  # COM velocity x
     vz = r_dot * np.cos(theta) - r * theta_dot * np.sin(theta)  # COM velocity z
 
@@ -196,9 +208,9 @@ if __name__ == "__main__":
 
     # define the sytem parameters
     sys_params = slip_params(m  = 1.0,    # mass [kg]
-                             l0 = 1.0,     # leg free length [m]
+                             l0 = 1.0,    # leg free length [m]
                              k  = 1000.0, # leg stiffness [N/m]
-                             g  = 9.81)    # gravity [m/s^2]
+                             g  = 9.81)   # gravity [m/s^2]
 
     # initial state (cartesian coordinates)
     # x0 = np.array([0.0,   # px
@@ -207,15 +219,15 @@ if __name__ == "__main__":
     #                0.01]) # vz
     # dt = 0.01
     # alpha = 0.0
-    # t_flight, xt_flight, D_t = slip_flight_fwd_prop(x0, dt, alpha, sys_params)
+    # t_span, x_t, D_t = slip_flight_fwd_prop(x0, dt, alpha, sys_params)
 
     # initial state (polar coordinates)
-    x0 = np.array([0.9,   # r
+    x0 = np.array([0.7,   # r
                    0.1,   # theta
-                   0.0,   # rdot
-                   0.0])  # thetadot
-    dt = 0.01
-    t_span, x_t, D_t = slip_ground_dyn_fwd_prop(x0, dt, sys_params)
+                   -2,   # rdot
+                   0])  # thetadot
+    dt = 0.005
+    t_span, x_t, D_t = slip_ground_fwd_prop(x0, dt, sys_params)
 
     # convert the polar coordinates to cartesian
     for i in range(len(t_span)):
@@ -224,7 +236,7 @@ if __name__ == "__main__":
     # plot the positoins
     plt.figure()
     plt.plot(0, 0, 'ko')
-    plt.plot(x_t[:, 0], x_t[:, 1])
+    plt.plot(x_t[:, 0], x_t[:, 1], 'b.')
     plt.plot(x_t[0, 0], x_t[0, 1], 'go')
     plt.plot(x_t[-1, 0], x_t[-1, 1], 'rx')
     plt.grid()
