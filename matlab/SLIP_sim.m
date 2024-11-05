@@ -480,7 +480,7 @@ function x_polar = cart_to_polar(x_cart, params, alpha)
     p_foot = [x + params.l0 * sin(alpha); z - params.l0 * cos(alpha)]; % foot position
 
     x = p_com(1) - p_foot(1);
-    z = p_com(2) - p_foot(2);
+    z = p_com(2) - p_foot(2);  % potential for error here! 
 
     r = sqrt(x^2 + z^2);
     th = atan2(x, z);     % be carefule about arctan2
