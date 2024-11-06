@@ -94,7 +94,7 @@ def slip_ground_fwd_prop(x0: np.array,
 # SLIP flight dynamics (cartesian coordinates)
 def slip_flight_fwd_prop(x0: np.array, 
                          dt: float, 
-                         alpha: float, 
+                         apex_terminate: bool,
                          params: slip_params) -> np.array:
     """
     Simulate the flight phase of the Spring Loaded Inverted Pendulum (SLIP) model.
@@ -102,29 +102,40 @@ def slip_flight_fwd_prop(x0: np.array,
     # TODO: Consider adding a velocity input in the leg for flight phase.
 
     # unpack the initial state
-    px_0 = x0[0]
-    pz_0 = x0[1]
+    px_0 = x0[0]  # these are in world frame
+    pz_0 = x0[1]  # these are in world frame
     vx_0 = x0[2]
     vz_0 = x0[3]
 
     # ensure that the COM is above the ground
     assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
 
-    # Guard Condition: compute the impact height and time until impact
-    pz_impact = params.l0 * np.cos(alpha)
-    a = 0.5 * params.g
-    b = - vz_0
-    c = -(pz_0 - pz_impact)
-    s = np.sqrt(b**2 - 4*a*c)
-    d = 2 * a
-    t1 = (-b + s) / d
-    t2 = (-b - s) / d
-    t_impact = max(t1, t2)
-    assert t_impact > 0, "Time until impact must be positive."
+    # choose control action
+    vx_des = 0.0
+    alpha = raibert_controller(x0, vx_des, params)
+
+    # Apex Condition: compute time until apex
+    if apex_terminate is True:
+        # find the zero velocity time
+        assert vz_0 > 0, "The SLIP z-velocity is not upwwards, therfore no such positive apex time exists."
+        t_terminate = vz_0 /params.g  # from vz(t) = vz_0 - g*t
+
+    # Guard Condition: compute the time until impact
+    else:
+        pz_impact = params.l0 * np.cos(alpha)
+        a = 0.5 * params.g
+        b = - vz_0
+        c = -(pz_0 - pz_impact)
+        s = np.sqrt(b**2 - 4*a*c)
+        d = 2 * a
+        t1 = (-b + s) / d
+        t2 = (-b - s) / d
+        t_terminate = max(t1, t2)
+        assert t_terminate >= 0, "Time until impact must be positive or equal to zero."
 
     # create a time vector
-    t_span = np.arange(0, t_impact, dt)
-    t_span = np.append(t_span, t_impact)
+    t_span = np.arange(0, t_terminate, dt)
+    t_span = np.append(t_span, t_terminate)
 
     # create a trajectory vector
     x_t = np.zeros((len(t_span), 4))
@@ -144,21 +155,32 @@ def slip_flight_fwd_prop(x0: np.array,
     # Domain information (0 for flight phase)
     D_t = np.zeros((len(t_span), 1))
 
-    return t_span, x_t, D_t
+    # compute the final leg position in world frame
+    x_com = x_t[-1, :]     # take the last state as the final state
+    p_foot = np.array([x_com[0] - params.l0 * np.sin(alpha),
+                       x_com[1] - params.l0 * np.cos(alpha)])
 
-# # SLIP full dynamics propogation
-# def slip_fwd_prop(x0: np.array,
-#                   u_alpha: float,
-#                   dt: float,
-#                   params: slip_params) -> np.array:
-#     """
-#     Full SLIP model forward propagation given an initial state and control input.
-#     We see what the apex is at the end
-#     """
+    return t_span, x_t, D_t, p_foot
 
-#     # ensure the SLIP is not underground
-#     assert x0[1] > 0, "The SLIP intial position is underground."
-            
+######################################################################################
+# CONTROL
+######################################################################################
+
+# simple raibert controller # TODO: this will be a normal distirbution
+def raibert_controller(x_flight: np.array,
+                       v_des: float,
+                       params: slip_params) -> float:
+    """
+    Simple Raibert controller for the SLIP model.
+    """
+    # unpack the state
+    vx = x_flight[2]
+
+    # compute the desired angle
+    kd = 0.15
+    alpha = -kd * (vx - v_des) 
+
+    return alpha
 
 ######################################################################################
 # COORDINATE TRANSFORMATIONS
@@ -232,17 +254,20 @@ if __name__ == "__main__":
                              k  = 100.0,  # leg stiffness [N/m]
                              g  = 9.81)  # gravity [m/s^2]
 
-    # initial state in cartesian
-    alpha = np.pi/4 
-    x0_cart_global = np.array([1.0 + sys_params.l0 * np.sin(alpha), 
-                        sys_params.l0 * np.cos(alpha), 
-                        -0.1, 
-                        -0.1])
-    x0_cart_local = cartesian_local_flight(x0_cart_global, alpha, sys_params)
-    print(x0_cart_local)
-    
-    x0_polar = carteisan_to_polar(x0_cart_local, sys_params)
-    print(x0_polar)
+    # simulation parameters
+    dt = 0.005
+    apex_terminate = False
 
-    x0_cart_local = polar_to_cartesian(x0_polar, sys_params)
-    print(x0_cart_local)
+    # initial state in cartesian
+    x0_cart_global = np.array([0.0, 
+                               3.0, 
+                               1.0, 
+                               1.0])
+    t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0_cart_global, dt, apex_terminate, sys_params)
+
+    # plot the results 
+    plt.plot(x_t[:,0], x_t[:,1], 'b.')
+    plt.xlabel('x [m]')
+    plt.ylabel('z [m]')
+    plt.show()
+
