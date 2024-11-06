@@ -136,7 +136,7 @@ def slip_flight_fwd_prop(x0: np.array,
         x_t[i, 0] = px_0 + vx_0 * t                          # pos x
         x_t[i, 1] = pz_0 + vz_0 * t - 0.5 * params.g * t**2  # pos z
         x_t[i, 2] = vx_0                                     # vel x       
-        x_t[i, 3] = vz_0 + params.g * t                      # vel z
+        x_t[i, 3] = vz_0 - params.g * t                      # vel z
 
         # check that the COM is above the ground
         assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
@@ -254,26 +254,26 @@ if __name__ == "__main__":
                              g  = 9.81)  # gravity [m/s^2]
 
     # initial state (cartesian coordinates)
-    # x0 = np.array([0.0,   # px
-    #                3.0,   # pz
-    #                0.3,   # vx
-    #                0.01]) # vz
-    # dt = 0.01
-    # alpha = 0.0
-    # t_span, x_t, D_t = slip_flight_fwd_prop(x0, dt, alpha, sys_params)
+    x0 = np.array([0.0,   # px
+                   3.0,   # pz
+                   0.3,   # vx
+                   0.01]) # vz
+    dt = 0.01
+    alpha = 0.0
+    t_span, x_t, D_t = slip_flight_fwd_prop(x0, dt, alpha, sys_params)
 
     # initial state (polar coordinates)
-    x0 = np.array([0.7,    # r
-                   0.1,    # theta
-                   0.0,    # rdot
-                   0])     # thetadot
-    print("x0 Polar: ", x0)
-    x0_cartesian = polar_to_cartesian(x0, sys_params)
-    # print("Cart: ", x0_cartesian)
-    x0_polar = carteisan_to_polar(x0_cartesian, -x0[1], sys_params)
-    print("Polar: ", x0_polar)
+    # x0 = np.array([0.7,    # r
+    #                0.1,    # theta
+    #                0.0,    # rdot
+    #                0])     # thetadot
+    # print("x0 Polar: ", x0)
+    # x0_cartesian = polar_to_cartesian(x0, sys_params)
+    # # print("Cart: ", x0_cartesian)
+    # x0_polar = carteisan_to_polar(x0_cartesian, -x0[1], sys_params)
+    # print("Polar: ", x0_polar)
 
-    exit(0)
+    # exit(0)
 
      
 
@@ -305,12 +305,12 @@ if __name__ == "__main__":
     # plt.grid()
     # plt.show()
 
-    # # plot the positoins
+    # plot the positoins
     # x_t = x_t_cart
-    # plt.figure()
-    # plt.plot(0, 0, 'ko')
-    # plt.plot(x_t[:, 0], x_t[:, 1], 'b.')
-    # plt.plot(x_t[0, 0], x_t[0, 1], 'go')
-    # plt.plot(x_t[-1, 0], x_t[-1, 1], 'rx')
-    # plt.grid()
-    # plt.show()
+    plt.figure()
+    plt.plot(0, 0, 'ko')
+    plt.plot(x_t[:, 0], x_t[:, 1], 'b.')
+    plt.plot(x_t[0, 0], x_t[0, 1], 'go')
+    plt.plot(x_t[-1, 0], x_t[-1, 1], 'rx')
+    plt.grid()
+    plt.show()
