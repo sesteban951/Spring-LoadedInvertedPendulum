@@ -164,68 +164,12 @@ def slip_flight_fwd_prop(x0: np.array,
 # COORDINATE TRANSFORMATIONS
 ######################################################################################
 
-# Cartesian to polar coordinate
-def carteisan_to_polar(x_cart: np.array, 
-                       alpha: float, 
-                       params: slip_params) -> np.array:
-    """
-    Convert the cartesian coordinates to polar coordinates.
-    """
-    # flight state, x = [x, z, xdot, zdot]
-    px = x_cart[0]
-    pz = x_cart[1]
-    vx = x_cart[2]
-    vz = x_cart[3]
-
-    # print("px: ", px)
-    # print("pz: ", pz)
-    # print("vx: ", vx)
-    # print("vz: ", vz)
-
-    # print("-------------------")
-
-    # positions
-    px_com = px    # x com position in world frame
-    pz_com = pz    # z com position in world frame
-    px_foot = px + params.l0 * np.sin(alpha)  # foot position x
-    pz_foot = 0                               # foot position z
-
-    # print("l0: ", params.l0)
-    # print("sin(alpha): ", np.sin(alpha)) 
-    # print("cos(alpha): ", np.cos(alpha))
-    # print("alpha: ", alpha)
-    # print("l0*cos(alpha): ", params.l0 * np.cos(alpha))
-    # print("pz_com: ", pz_com)
-    # print("pz_foot: ", pz_foot)
-
-    x = px_com - px_foot
-    z = pz_com - pz_foot
-
-    # print(x)
-    # print(z)
-
-    # print("-------------------")
-
-    # full state in polar coordinates
-    r = np.sqrt(x**2 + z**2)           # leg length
-    th = np.arctan2(x, z)              # leg angle
-    r_dot = (x * vx + z * vz) / r      # leg length rate
-    th_dot = (z * vx - x * vz) / r**2  # leg angle rate
-
-    # print("r: ", r)
-    # print("th: ", th)
-    # print("r_dot: ", r_dot)
-    # print("th_dot: ", th_dot)
-
-    # exit(0)
-
-    return np.array([r, th, r_dot, th_dot])
-
 # Polar to Cartesian coordiante
 def polar_to_cartesian(x_polar: np.array, 
                        params: slip_params) -> np.array:
     """
     Convert the polar coordinates to cartesian coordinates.
+    Assumes the foot is at (0,0), must add the last leg pos after this method to keep track in world frame
     """
     # polar state, x = [r, theta, rdot, thetadot]
     r = x_polar[0]
@@ -236,10 +180,45 @@ def polar_to_cartesian(x_polar: np.array,
     # full state in cartesian coordintes
     px = r * np.sin(theta)      # COM position x
     pz = r * np.cos(theta)      # COM position z
-    vx = (r_dot * np.sin(theta) + r * theta_dot * np.cos(theta))  # COM velocity x
-    vz = (r_dot * np.cos(theta) - r * theta_dot * np.sin(theta))  # COM velocity z
+    vx = r_dot * np.sin(theta) + r * theta_dot * np.cos(theta)  # COM velocity x
+    vz = r_dot * np.cos(theta) - r * theta_dot * np.sin(theta)  # COM velocity z
 
     return np.array([px, pz, vx, vz])
+
+# Cartesian to polar coordinate
+def carteisan_to_polar(x_cart_local: np.array, 
+                       params: slip_params) -> np.array:
+    """
+    Convert the cartesian coordinates to polar coordinates.
+    Assumes the cartesian coordinates are local:    x_cart = x_com_W = x_foot_W 
+    """
+    # flight state, x = [x, z, xdot, zdot]
+    px = x_cart_local[0]
+    pz = x_cart_local[1]
+    vx = x_cart_local[2]
+    vz = x_cart_local[3]
+
+    # full state in polar coordinates
+    r = np.sqrt(px**2 + pz**2)           # leg length
+    th = np.arctan2(px, pz)              # leg angle
+    r_dot = (px * vx + pz * vz) / r      # leg length rate
+    th_dot = (vx * pz - px * vz) / r**2  # leg angle rate
+
+    return np.array([r, th, r_dot, th_dot])
+
+# get the foot position given com pos and attack angle
+def cartesian_local_flight(x_cart_W: np.array, 
+                           alpha: float,
+                           params: slip_params) -> np.array:
+    """
+    Compute the COM w.r.t. foot pos. When the leg is in the air and uncompressed.
+    """
+    # compute the COM position
+    x0_cart_local = np.array([params.l0 * np.sin(alpha), 
+                              params.l0 * np.cos(alpha),
+                              x_cart_W[2],
+                              x_cart_W[3]])
+    return x0_cart_local
 
 ######################################################################################
 # MAIN
@@ -253,64 +232,17 @@ if __name__ == "__main__":
                              k  = 100.0,  # leg stiffness [N/m]
                              g  = 9.81)  # gravity [m/s^2]
 
-    # initial state (cartesian coordinates)
-    x0 = np.array([0.0,   # px
-                   3.0,   # pz
-                   0.3,   # vx
-                   0.01]) # vz
-    dt = 0.01
-    alpha = 0.0
-    t_span, x_t, D_t = slip_flight_fwd_prop(x0, dt, alpha, sys_params)
+    # initial state in cartesian
+    alpha = np.pi/4 
+    x0_cart_global = np.array([1.0 + sys_params.l0 * np.sin(alpha), 
+                        sys_params.l0 * np.cos(alpha), 
+                        -0.1, 
+                        -0.1])
+    x0_cart_local = cartesian_local_flight(x0_cart_global, alpha, sys_params)
+    print(x0_cart_local)
+    
+    x0_polar = carteisan_to_polar(x0_cart_local, sys_params)
+    print(x0_polar)
 
-    # initial state (polar coordinates)
-    # x0 = np.array([0.7,    # r
-    #                0.1,    # theta
-    #                0.0,    # rdot
-    #                0])     # thetadot
-    # print("x0 Polar: ", x0)
-    # x0_cartesian = polar_to_cartesian(x0, sys_params)
-    # # print("Cart: ", x0_cartesian)
-    # x0_polar = carteisan_to_polar(x0_cartesian, -x0[1], sys_params)
-    # print("Polar: ", x0_polar)
-
-    # exit(0)
-
-     
-
-    # dt = 0.002
-    # t_span, x_t, D_t = slip_ground_fwd_prop(x0, dt, sys_params)
-
-    # # convert the polar coordinates to cartesian
-    # x_t_cart = np.zeros((len(x_t), 4))
-    # for i in range(len(t_span)):
-    #     x_t_cart[i, :] = polar_to_cartesian(x_t[i, :], sys_params)
-
-    # # print(x_t_cart[:,1])
-
-    # # just to test the inverse mapping, convert back to polar
-    # x_t_polar = np.zeros((len(x_t), 4))
-    # for i in range(len(t_span)):
-    #     x_t_polar[i, :] = carteisan_to_polar(x_t_cart[i, :], -0.0, sys_params)
-
-    # print(x_t_polar[:,0])
-
-    # compute the error
-    # idx = 0
-    # error = np.linalg.norm(x_t_polar[:,idx] - x_t[:,idx])
-
-    # verify conversion by plotting
-    # plt.figure()
-    # plt.plot(x_t[:, idx], 'b.')
-    # plt.plot(x_t_polar[:, idx], 'r.')
-    # plt.grid()
-    # plt.show()
-
-    # plot the positoins
-    # x_t = x_t_cart
-    plt.figure()
-    plt.plot(0, 0, 'ko')
-    plt.plot(x_t[:, 0], x_t[:, 1], 'b.')
-    plt.plot(x_t[0, 0], x_t[0, 1], 'go')
-    plt.plot(x_t[-1, 0], x_t[-1, 1], 'rx')
-    plt.grid()
-    plt.show()
+    x0_cart_local = polar_to_cartesian(x0_polar, sys_params)
+    print(x0_cart_local)
