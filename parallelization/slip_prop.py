@@ -10,17 +10,22 @@ import time
 # data class to hold the system parameters
 @dataclass
 class slip_params:
-    m:  float  # mass, [kg]
-    l0: float  # leg free length, [m]
-    k:  float  # leg stiffness, [N/m]
-    g:  float  # gravity, [m/s^2]
+    m:  float    # mass, [kg]
+    l0: float    # leg free length, [m]
+    k:  float    # leg stiffness, [N/m]
+    br: float    # radial damping coeff, [Ns/m]
+    ba: float    # angular damping coeff, [Ns/m]
+    g:  float    # gravity, [m/s^2]
+    umax: float  # max control input, [N]
+    umin: float  # min control input, [N]
 
 ######################################################################################
 # DYNAMICS
 ######################################################################################
 
 # SLIP ground dynamics (polar coordinates)
-def slip_ground_dyn(xk: np.array, 
+def slip_ground_dyn(xk: np.array,
+                    uk: float,
                     params: slip_params) -> np.array:
     """
     Closed form dynamics for the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
@@ -35,8 +40,8 @@ def slip_ground_dyn(xk: np.array,
     xdot = np.array([
         r_dot,
         theta_dot,
-        r * theta_dot**2 - params.g * np.cos(theta) + (params.k/params.m) * (params.l0 - r),
-        -(2/r) * r_dot*theta_dot + (params.g/r) * np.sin(theta)
+        r * theta_dot**2 - params.g*np.cos(theta) + (params.k/params.m)*(params.l0 - r) - (params.br/params.m)*r_dot + (1/params.m)*uk,
+        -(2/r) * r_dot*theta_dot + (params.g/r) * np.sin(theta) - (params.ba/params.m)*theta_dot
     ])
 
     return xdot
@@ -50,10 +55,12 @@ def slip_ground_fwd_prop(x0: np.array,
     """
     # ensure the SLIP hasn't fallen over
     assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Pole angle is: {:.2f} [deg]".format(x0[1] * 180/np.pi)
+    # TODO: implement error handling when encounter error
 
     # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
+    u_t = []
     x_t = []
-    x_t.append(x0)    
+    x_t.append(x0)
 
     # do Integration until you hit the switching manifold
     k = 0
@@ -62,12 +69,14 @@ def slip_ground_fwd_prop(x0: np.array,
     while not (leg_uncompressed * dot_product): # TODO: consider better switching detection
 
         # RK2 integration (in polar coordinates)
-        f1 = slip_ground_dyn(xk, params)
-        f2 = slip_ground_dyn(xk + 0.5 * dt * f1, params)
+        uk = ground_control(xk, params)       # TODO: appropiately choose how to control the leg
+        f1 = slip_ground_dyn(xk, uk, params)
+        f2 = slip_ground_dyn(xk + 0.5 * dt * f1, uk, params)
         xk = xk + dt * f2
         x_t.append(xk) #  TODO: figure out a static size for the container. Dynamic = bad
+        u_t.append(uk) #  TODO: figure out a static size for the container. Dynamic = bad
 
-        # check take-off guard conditions
+        # compute take-off guard conditions
         x_cart = polar_to_cartesian(xk, np.array([0, 0]), params)  # consider just saving this vector directly to save on compute
         leg_pos = np.array([x_cart[0], x_cart[1]])
         leg_vel = np.array([x_cart[2], x_cart[3]])
@@ -78,20 +87,24 @@ def slip_ground_fwd_prop(x0: np.array,
         k += 1
 
     # convert the trajectory to a numpy array
-    N = len(x_t)
     x_t = np.array(x_t)
+    u_t.append(uk)      # the last point is the same as the previous (to maintain same size as state)
+    u_t = np.array(u_t)
+    u_t = u_t.reshape(-1, 1)
 
     # domain information (1 for ground phase)
+    N = len(x_t)
     D_t = np.ones((N, 1))
 
     # time span infomration
     t_span = np.linspace(0, (N-1)*dt, N)
+    t_span = t_span.reshape(-1, 1)
 
-    return t_span, x_t, D_t
+    return t_span, x_t, u_t, D_t
 
 # SLIP flight dynamics (returns in cartesian world frame)
 def slip_flight_fwd_prop(x0: np.array, 
-                         dt: float, 
+                         dt: float,
                          apex_terminate: bool,
                          params: slip_params) -> np.array:
     """
@@ -108,9 +121,9 @@ def slip_flight_fwd_prop(x0: np.array,
     # ensure that the COM is above the ground
     assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
 
-    # choose control action
-    vx_des = 0.0
-    alpha = raibert_controller(x0, vx_des, params)
+    # compute a control action for the impact angle
+    v_des = 0.0
+    alpha = angle_control(x0, v_des, params)
 
     # compute time until apex
     if vz_0 >= 0:
@@ -135,11 +148,13 @@ def slip_flight_fwd_prop(x0: np.array,
         t1 = (-b + s) / d
         t2 = (-b - s) / d
         t_terminate = max(t1, t2)
-        assert t_terminate >= 0, "Time until impact must be positive or equal to zero."
+        assert t_terminate >= 0, "No impact time exists. Time until impact must be positive or equal to zero." 
+        # TODO: implement error handling with bad alphas
 
     # create a time vector
     t_span = np.arange(0, t_terminate, dt)
     t_span = np.append(t_span, t_terminate)
+    t_span = t_span.reshape(-1, 1)
 
     # create a trajectory vector
     x_t = np.zeros((len(t_span), 4))
@@ -156,9 +171,10 @@ def slip_flight_fwd_prop(x0: np.array,
         x_apex = np.array([0, 0, 0, 0])
 
     # simulate the flight phase
-    for i, t in enumerate(t_span):
+    for i in range(len(t_span)):
 
         # update the state
+        t = t_span[i, 0]
         x_t[i, 0] = px_0 + vx_0 * t                          # pos x
         x_t[i, 1] = pz_0 + vz_0 * t - 0.5 * params.g * t**2  # pos z
         x_t[i, 2] = vx_0                                     # vel x       
@@ -166,6 +182,9 @@ def slip_flight_fwd_prop(x0: np.array,
 
         # check that the COM is above the ground
         assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
+
+    # generate a control input vector (should be zeros since no control in flight phase)
+    u_t = np.zeros((len(t_span),1))
 
     # Domain information (0 for flight phase)
     D_t = np.zeros((len(t_span), 1))
@@ -175,7 +194,7 @@ def slip_flight_fwd_prop(x0: np.array,
     p_foot = np.array([x_com[0] - params.l0 * np.sin(alpha),
                        x_com[1] - params.l0 * np.cos(alpha)])
 
-    return t_span, x_t, x_apex, D_t, p_foot
+    return t_span, x_t, u_t, alpha, x_apex, D_t, p_foot
 
 # SLIP full propogatoin (returns in cartesian world frame)
 def slip_prop(x0: np.array,
@@ -192,6 +211,7 @@ def slip_prop(x0: np.array,
     # container for the trajectory
     # TODO: figure out a static size for the container. Dynamic = bad
     X = []  # cartesian state
+    U = []  # radial inputs
     T = []  # time
     D = []  # domain
     P = []  # foot position
@@ -201,12 +221,12 @@ def slip_prop(x0: np.array,
     apex_terminate = False
     t_current = 0.0
 
-    # do the first flight phase
-    t_span, x_t, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+    t_span, x_t, u_t, _, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
     
     t_span = t_span + t_current
     T.append(t_span)
     X.append(x_t)
+    U.append(u_t)
     A.append(x_apex)
     D.append(D_t)
     P.append(p_foot)
@@ -221,13 +241,14 @@ def slip_prop(x0: np.array,
         x0_polar = carteisan_to_polar(xf_cart, p_foot, params)
 
         # ground phase
-        t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, params)
+        t_span, x_t, u_t, D_t = slip_ground_fwd_prop(x0_polar, dt, params)
         for i in range(len(x_t)):
             x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, params) # convert polar to cartesian
         t_span = t_span + t_current
         
         T.append(t_span)
         X.append(x_t)
+        U.append(u_t)
         D.append(D_t)
         t_current = t_span[-1]
 
@@ -241,37 +262,54 @@ def slip_prop(x0: np.array,
             apex_terminate = False
 
         # flight phase
-        t_span, x_t, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+        t_span, x_t, u_t, _, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
 
         t_span = t_span + t_current
         T.append(t_span)
         X.append(x_t)
+        U.append(u_t)
         A.append(x_apex)
         D.append(D_t)
         P.append(p_foot)
         t_current = t_span[-1]
 
-    return T, X, A, P, D
+    return T, X, U, A, P, D
 
 ######################################################################################
 # CONTROL
 ######################################################################################
 
-# simple raibert controller # TODO: this will be a normal distirbution
-def raibert_controller(x_flight: np.array,
-                       v_des: float,
-                       params: slip_params) -> float:
+# simple leg landing controller # TODO: this will be a normal distirbution
+def angle_control(x_flight: np.array,
+                  v_des: float,
+                  params: slip_params) -> float:
     """
     Simple Raibert controller for the SLIP model.
     """
     # unpack the state
     vx = x_flight[2]
 
-    # compute the desired angle
+    # compute the desired angle from simple raibert controller
     kd = 0.13
     alpha = -kd * (vx - v_des) 
 
     return alpha
+
+# TODO: define some control for the prismatic joint in ground phase
+def ground_control(xk: np.array,
+                   params: slip_params) -> float:
+    """
+    Controller for the prismatic joint in the SLIP model during ground phase.
+    """
+
+    u = 0.0
+
+    # saturate the control input
+    if (u > params.umax) or (u < params.umin):
+        print("Prismatic control input is out of bounds. Control input is: {:.2f} [N]".format(u))
+        u = np.clip(u, params.umin, params.umax)
+
+    return u
 
 ######################################################################################
 # COORDINATE TRANSFORMATIONS
@@ -336,10 +374,15 @@ if __name__ == "__main__":
 
     # define the sytem parameters
     t0 = time.time()
-    sys_params = slip_params(m  = 1.0,   # mass [kg]
-                             l0 = 1.0,   # leg free length [m]
+    sys_params = slip_params(m  = 1.0,    # mass [kg]
+                             l0 = 1.0,    # leg free length [m]
                              k  = 500.0,  # leg stiffness [N/m]
-                             g  = 9.81)  # gravity [m/s^2]
+                             br = 0.0,    # radialdamping [Ns/m]
+                             ba = 0.0,    # angular damping [Ns/m]
+                             g  = 9.81,   # gravity [m/s^2]
+                             umax = 10.0, # max control input [N]
+                             umin = -10.0 # min control input [N]
+                            )
 
     # simulation parameters
     dt = 0.005
@@ -352,26 +395,29 @@ if __name__ == "__main__":
                           1.0,  
                           0.0]) 
     N_apex = 3
-    T, X, A, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
-
-    print(len(T))
-    print(len(X))
-    print(len(A))
-    print(len(P))
-    print(len(D))
+    T, X, U, A, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
 
     tf = time.time()
     print("Time to run: ", tf - t0)
 
     # convert to CSV for saving
-    T_data = np.hstack(T)
+    T_data = np.vstack(T)
     X_data = np.vstack(X)
+    U_data = np.vstack(U)
     A_data = np.vstack(A)
     P_data = np.vstack(P)
     D_data = np.vstack(D)
 
+    # print(T_data.shape)
+    # print(X_data.shape)
+    # print(U_data.shape) 
+    # print(A_data.shape)
+    # print(P_data.shape)
+    # print(D_data.shape)
+
     # save the data
     np.savetxt("./data/slip_prop_T.csv", T_data, delimiter=",")
+    np.savetxt("./data/slip_prop_X.csv", X_data, delimiter=",")
     np.savetxt("./data/slip_prop_X.csv", X_data, delimiter=",")
     np.savetxt("./data/slip_prop_A.csv", A_data, delimiter=",")
     np.savetxt("./data/slip_prop_P.csv", P_data, delimiter=",")
@@ -398,13 +444,13 @@ if __name__ == "__main__":
     plt.show()
 
     # plot the apex states
-    plt.figure()
-    for i in range(len(A)):
-        if A[i] is not None:
-            plt.plot(A[i][2], A[i][1], 'rx')
-    plt.plot(A[0][2], A[0][1], 'go')
-    plt.plot(A[-1][2], A[-1][1], 'kx')
-    plt.xlabel('vx [m/s]')
-    plt.ylabel('pz [m]')
-    plt.grid()
-    plt.show()
+    # plt.figure()
+    # for i in range(len(A)):
+    #     if A[i] is not None:
+    #         plt.plot(A[i][2], A[i][1], 'rx')
+    # plt.plot(A[0][2], A[0][1], 'go')
+    # plt.plot(A[-1][2], A[-1][1], 'kx')
+    # plt.xlabel('vx [m/s]')
+    # plt.ylabel('pz [m]')
+    # plt.grid()
+    # plt.show()
