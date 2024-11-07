@@ -43,7 +43,7 @@ def slip_ground_dyn(xk: np.array,
 
     return xdot
 
-# SLIP ground dynamics (polar coordinates)
+# SLIP ground dynamics (returns in polar local frame)
 def slip_ground_fwd_prop(x0: np.array, 
                          dt: float, 
                          params:float) -> np.array:
@@ -51,13 +51,13 @@ def slip_ground_fwd_prop(x0: np.array,
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
     # ensure the SLIP hasn't fallen over
-    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase."
+    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Angle is: {}".format(x0[1])
 
     # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
     x_t = []
     x_t.append(x0)    
 
-    # do Integration until switching conditions are met
+    # do Integration until hit the switching manifold
     k = 0
     xk = x0
     dot_product, leg_uncompressed = False, False
@@ -70,7 +70,7 @@ def slip_ground_fwd_prop(x0: np.array,
         x_t.append(xk) #  TODO: figure out a static size for the container. Dynamic = bad
 
         # check take-off guard conditions
-        x_cart = polar_to_cartesian(xk, params)  # consider just saving this vector directly to save on compute
+        x_cart = polar_to_cartesian(xk, np.array([0, 0]), params)  # consider just saving this vector directly to save on compute
         leg_pos = np.array([x_cart[0], x_cart[1]])
         leg_vel = np.array([x_cart[2], x_cart[3]])
         dot_product = (np.dot(leg_pos, leg_vel) >= 0)
@@ -91,7 +91,7 @@ def slip_ground_fwd_prop(x0: np.array,
 
     return t_span, x_t, D_t
 
-# SLIP flight dynamics (cartesian coordinates)
+# SLIP flight dynamics (returns in cartesian world frame)
 def slip_flight_fwd_prop(x0: np.array, 
                          dt: float, 
                          apex_terminate: bool,
@@ -162,6 +162,36 @@ def slip_flight_fwd_prop(x0: np.array,
 
     return t_span, x_t, D_t, p_foot
 
+# SLIP full propogatoin (returns in cartesian world frame)
+def slip_prop(x0: np.array,
+              dt: float,
+              N_apex: int,
+              apex_terminate: bool,
+              params: slip_params) -> np.array:
+    """
+    Propogate the Spring Loaded Inverted Pendulum (SLIP) model. Over n apex steps.
+    Starts in the flight phase.
+    """
+    # check that you want at least one apex step
+    assert N_apex > 0, "The number of apex steps must be greater than zero."
+
+    # counter for how many apex steps have been taken
+    n_apex = 0
+
+    while n_apex < N_apex:
+
+        # flight phase
+        t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+
+        # ground phase
+        x0 = x_t[-1, :]
+        t_span, x_t, D_t = slip_ground_fwd_prop(x0, dt, params)
+
+        # increment the counter
+        n_apex += 1
+
+    return t_span, x_t, D_t, p_foot
+
 ######################################################################################
 # CONTROL
 ######################################################################################
@@ -186,8 +216,9 @@ def raibert_controller(x_flight: np.array,
 # COORDINATE TRANSFORMATIONS
 ######################################################################################
 
-# Polar to Cartesian coordiante
+# Polar to Cartesian coordiante (returns in world frame)
 def polar_to_cartesian(x_polar: np.array, 
+                       p_foot_W: np.array,
                        params: slip_params) -> np.array:
     """
     Convert the polar coordinates to cartesian coordinates.
@@ -205,20 +236,28 @@ def polar_to_cartesian(x_polar: np.array,
     vx = r_dot * np.sin(theta) + r * theta_dot * np.cos(theta)  # COM velocity x
     vz = r_dot * np.cos(theta) - r * theta_dot * np.sin(theta)  # COM velocity z
 
+    # shift the COM position by the foot position
+    px += p_foot_W[0]
+
     return np.array([px, pz, vx, vz])
 
-# Cartesian to polar coordinate
-def carteisan_to_polar(x_cart_local: np.array, 
+# Cartesian to polar coordinate (returns in local polar frame)
+def carteisan_to_polar(x_cart_W: np.array, 
+                       p_foot_W : np.array,
                        params: slip_params) -> np.array:
     """
     Convert the cartesian coordinates to polar coordinates.
-    Assumes the cartesian coordinates are local:    x_cart = x_com_W = x_foot_W 
+    Assumes the cartesian state and foot position are in world frame.
     """
     # flight state, x = [x, z, xdot, zdot]
-    px = x_cart_local[0]
-    pz = x_cart_local[1]
-    vx = x_cart_local[2]
-    vz = x_cart_local[3]
+    px_W = x_cart_W[0]
+    pz_W = x_cart_W[1]
+    vx = x_cart_W[2]
+    vz = x_cart_W[3]
+
+    # convert the world frame coordaintes to local frame
+    px = px_W - p_foot_W[0]
+    pz = pz_W - p_foot_W[1]
 
     # full state in polar coordinates
     r = np.sqrt(px**2 + pz**2)           # leg length
@@ -227,20 +266,6 @@ def carteisan_to_polar(x_cart_local: np.array,
     th_dot = (vx * pz - px * vz) / r**2  # leg angle rate
 
     return np.array([r, th, r_dot, th_dot])
-
-# get the foot position given com pos and attack angle
-def cartesian_local_flight(x_cart_W: np.array, 
-                           alpha: float,
-                           params: slip_params) -> np.array:
-    """
-    Compute the COM w.r.t. foot pos. When the leg is in the air and uncompressed.
-    """
-    # compute the COM position
-    x0_cart_local = np.array([params.l0 * np.sin(alpha), 
-                              params.l0 * np.cos(alpha),
-                              x_cart_W[2],
-                              x_cart_W[3]])
-    return x0_cart_local
 
 ######################################################################################
 # MAIN
@@ -251,23 +276,64 @@ if __name__ == "__main__":
     # define the sytem parameters
     sys_params = slip_params(m  = 1.0,   # mass [kg]
                              l0 = 1.0,   # leg free length [m]
-                             k  = 100.0,  # leg stiffness [N/m]
+                             k  = 500.0,  # leg stiffness [N/m]
                              g  = 9.81)  # gravity [m/s^2]
 
     # simulation parameters
     dt = 0.005
     apex_terminate = False
 
-    # initial state in cartesian
-    x0_cart_global = np.array([0.0, 
-                               3.0, 
-                               1.0, 
-                               1.0])
-    t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0_cart_global, dt, apex_terminate, sys_params)
+    ###########################################################################
 
-    # plot the results 
-    plt.plot(x_t[:,0], x_t[:,1], 'b.')
+    # initial state in cartesian
+    x0_cart_W = np.array([0.0,  
+                          3.0,  
+                          1.0,  
+                          1.0]) 
+    t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0_cart_W, dt, apex_terminate, sys_params)
+    X1 = x_t
+    T1 = t_span
+
+    # convert to polar coordinates
+    xf_cart_W = x_t[-1, :]
+    x0_polar = carteisan_to_polar(xf_cart_W, p_foot, sys_params)
+    print(x0_polar)
+
+    # integrate in the polar coordiante system
+    t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, sys_params)
+
+    # convert polar to cartesian
+    for i in range(len(x_t)):
+        x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, sys_params)
+    X2 = x_t
+    T2 = t_span
+
+    x0_cart_W = x_t[-1, :]
+    t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0_cart_W, dt, apex_terminate, sys_params)
+    X3 = x_t
+    T3 = t_span
+
+    # convert to polar coordinates
+    xf_cart_W = x_t[-1, :]
+    x0_polar = carteisan_to_polar(xf_cart_W, p_foot, sys_params)
+
+    # integrate in the polar coordiante system
+    t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, sys_params)
+
+    # convert polar to cartesian
+    for i in range(len(x_t)):
+        x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, sys_params)
+    X4 = x_t
+
+    # plot the results
+    plt.figure()
+    plt.plot(X1[:, 0], X1[:, 1], 'b')
+    plt.plot(X2[:, 0], X2[:, 1], 'r')
+    plt.plot(X3[:, 0], X3[:, 1], 'g')
+    plt.plot(X4[:, 0], X4[:, 1], 'y')
     plt.xlabel('x [m]')
     plt.ylabel('z [m]')
+    plt.grid
     plt.show()
+
 
