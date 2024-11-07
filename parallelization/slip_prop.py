@@ -1,9 +1,8 @@
 import numpy as np
 import scipy as sp
-
 import matplotlib.pyplot as plt
-
 from dataclasses import dataclass
+import time
 
 ######################################################################################
 # STRUCTS
@@ -51,13 +50,13 @@ def slip_ground_fwd_prop(x0: np.array,
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
     # ensure the SLIP hasn't fallen over
-    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Angle is: {}".format(x0[1])
+    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Angle is: {:.2f} [deg]".format(x0[1] * 180/np.pi)
 
     # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
     x_t = []
     x_t.append(x0)    
 
-    # do Integration until hit the switching manifold
+    # do Integration until you hit the switching manifold
     k = 0
     xk = x0
     dot_product, leg_uncompressed = False, False
@@ -166,7 +165,6 @@ def slip_flight_fwd_prop(x0: np.array,
 def slip_prop(x0: np.array,
               dt: float,
               N_apex: int,
-              apex_terminate: bool,
               params: slip_params) -> np.array:
     """
     Propogate the Spring Loaded Inverted Pendulum (SLIP) model. Over n apex steps.
@@ -177,20 +175,52 @@ def slip_prop(x0: np.array,
 
     # counter for how many apex steps have been taken
     n_apex = 0
+    t_current = 0.0
 
+    # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
+    X = []  # cartesian state
+    T = []  # time
+    D = []  # domain
+    P = []  # foot position
+
+    # forward propogate the SLIP model for N_apex discrete steps
+    apex_terminate = False
     while n_apex < N_apex:
+
+        print("number apex: ", n_apex)
 
         # flight phase
         t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+        t_span = t_span + t_current
+        T.append(t_span)
+        X.append(x_t)
+        D.append(D_t)
+        P.append(p_foot)
+        t_current += t_span[-1]
+
+        # set intial condition in ground phase
+        xf_cart = x_t[-1, :]
+        x0_polar = carteisan_to_polar(xf_cart, p_foot, params)
 
         # ground phase
+        t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, params)
+        t_span = t_span + t_current
+
+        # convert polar to cartesian
+        for i in range(len(x_t)):
+            x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, params)
+        T.append(t_span)
+        X.append(x_t)
+        D.append(D_t)    
+        t_current += t_span[-1]
+
+        # set the new intial condition
         x0 = x_t[-1, :]
-        t_span, x_t, D_t = slip_ground_fwd_prop(x0, dt, params)
 
         # increment the counter
         n_apex += 1
 
-    return t_span, x_t, D_t, p_foot
+    return T, X, D, P
 
 ######################################################################################
 # CONTROL
@@ -207,7 +237,7 @@ def raibert_controller(x_flight: np.array,
     vx = x_flight[2]
 
     # compute the desired angle
-    kd = 0.15
+    kd = 0.11
     alpha = -kd * (vx - v_des) 
 
     return alpha
@@ -274,6 +304,7 @@ def carteisan_to_polar(x_cart_W: np.array,
 if __name__ == "__main__":
 
     # define the sytem parameters
+    t0 = time.time()
     sys_params = slip_params(m  = 1.0,   # mass [kg]
                              l0 = 1.0,   # leg free length [m]
                              k  = 500.0,  # leg stiffness [N/m]
@@ -285,55 +316,28 @@ if __name__ == "__main__":
 
     ###########################################################################
 
-    # initial state in cartesian
+
     x0_cart_W = np.array([0.0,  
                           3.0,  
                           1.0,  
-                          1.0]) 
-    t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0_cart_W, dt, apex_terminate, sys_params)
-    X1 = x_t
-    T1 = t_span
+                          0.0]) 
+    N_apex = 20
+    T, X, D, P = slip_prop(x0_cart_W, dt, N_apex, sys_params)
 
-    # convert to polar coordinates
-    xf_cart_W = x_t[-1, :]
-    x0_polar = carteisan_to_polar(xf_cart_W, p_foot, sys_params)
-    print(x0_polar)
+    tf = time.time()
 
-    # integrate in the polar coordiante system
-    t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, sys_params)
+    print("Time to run: ", tf - t0)
 
-    # convert polar to cartesian
-    for i in range(len(x_t)):
-        x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, sys_params)
-    X2 = x_t
-    T2 = t_span
-
-    x0_cart_W = x_t[-1, :]
-    t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0_cart_W, dt, apex_terminate, sys_params)
-    X3 = x_t
-    T3 = t_span
-
-    # convert to polar coordinates
-    xf_cart_W = x_t[-1, :]
-    x0_polar = carteisan_to_polar(xf_cart_W, p_foot, sys_params)
-
-    # integrate in the polar coordiante system
-    t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, sys_params)
-
-    # convert polar to cartesian
-    for i in range(len(x_t)):
-        x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, sys_params)
-    X4 = x_t
-
-    # plot the results
+    # plot some stuff
     plt.figure()
-    plt.plot(X1[:, 0], X1[:, 1], 'b')
-    plt.plot(X2[:, 0], X2[:, 1], 'r')
-    plt.plot(X3[:, 0], X3[:, 1], 'g')
-    plt.plot(X4[:, 0], X4[:, 1], 'y')
+    for i in range(len(T)):
+        plt.plot(X[i][:, 0], X[i][:, 1])
+
+    # plot the foot position
+    for i in range(len(P)):
+        plt.plot(P[i][0], P[i][1], 'ro')
+
     plt.xlabel('x [m]')
     plt.ylabel('z [m]')
     plt.grid
     plt.show()
-
-
