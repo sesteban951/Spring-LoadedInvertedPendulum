@@ -1,5 +1,4 @@
 import numpy as np
-import scipy as sp
 import matplotlib.pyplot as plt
 from dataclasses import dataclass
 import time
@@ -50,7 +49,7 @@ def slip_ground_fwd_prop(x0: np.array,
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
     # ensure the SLIP hasn't fallen over
-    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Angle is: {:.2f} [deg]".format(x0[1] * 180/np.pi)
+    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Pole angle is: {:.2f} [deg]".format(x0[1] * 180/np.pi)
 
     # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
     x_t = []
@@ -113,11 +112,17 @@ def slip_flight_fwd_prop(x0: np.array,
     vx_des = 0.0
     alpha = raibert_controller(x0, vx_des, params)
 
-    # Apex Condition: compute time until apex
+    # compute time until apex
+    if vz_0 > 0:
+        t_apex = vz_0 / params.g  # from vz(t) = vz_0 - g*t
+    else:
+        t_apex = None
+
+    # Apex Condition: if you want to terminate at the apex
     if apex_terminate is True:
         # find the zero velocity time
         assert vz_0 > 0, "The SLIP z-velocity is not upwwards, therfore no such positive apex time exists."
-        t_terminate = vz_0 /params.g  # from vz(t) = vz_0 - g*t
+        t_terminate = t_apex
 
     # Guard Condition: compute the time until impact
     else:
@@ -139,6 +144,15 @@ def slip_flight_fwd_prop(x0: np.array,
     # create a trajectory vector
     x_t = np.zeros((len(t_span), 4))
 
+    # compute the apex state
+    if t_apex is not None:
+        x_apex = np.array([px_0 + vx_0 * t_apex,
+                           pz_0 + vz_0 * t_apex - 0.5 * params.g * t_apex**2,
+                           vx_0,
+                           vz_0 - params.g * t_apex])
+    else :
+        x_apex = None    
+
     # simulate the flight phase
     for i, t in enumerate(t_span):
 
@@ -159,68 +173,82 @@ def slip_flight_fwd_prop(x0: np.array,
     p_foot = np.array([x_com[0] - params.l0 * np.sin(alpha),
                        x_com[1] - params.l0 * np.cos(alpha)])
 
-    return t_span, x_t, D_t, p_foot
+    return t_span, x_t, x_apex, D_t, p_foot
 
 # SLIP full propogatoin (returns in cartesian world frame)
 def slip_prop(x0: np.array,
               dt: float,
               N_apex: int,
-              params: slip_params) -> np.array:
+              params: slip_params):
     """
     Propogate the Spring Loaded Inverted Pendulum (SLIP) model. Over n apex steps.
     Starts in the flight phase.
     """
     # check that you want at least one apex step
-    assert N_apex > 0, "The number of apex steps must be greater than zero."
+    assert N_apex >= 0, "The number of apex steps must be greater than or equal to zero."
 
-    # counter for how many apex steps have been taken
-    n_apex = 0
-    t_current = 0.0
-
-    # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
+    # container for the trajectory
+    # TODO: figure out a static size for the container. Dynamic = bad
     X = []  # cartesian state
     T = []  # time
     D = []  # domain
     P = []  # foot position
+    A = []  # apex states
 
     # forward propogate the SLIP model for N_apex discrete steps
     apex_terminate = False
-    while n_apex < N_apex:
+    t_current = 0.0
 
-        print("number apex: ", n_apex)
+    # do the first flight phase
+    t_span, x_t, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+    
+    t_span = t_span + t_current
+    T.append(t_span)
+    X.append(x_t)
+    A.append(x_apex)
+    D.append(D_t)
+    P.append(p_foot)
+    t_current += t_span[-1]
 
-        # flight phase
-        t_span, x_t, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
-        t_span = t_span + t_current
-        T.append(t_span)
-        X.append(x_t)
-        D.append(D_t)
-        P.append(p_foot)
-        t_current += t_span[-1]
+    # while not reached the desired number of apex steps
+    for k in range(N_apex):
 
-        # set intial condition in ground phase
+        # set intial condition for ground phase
         xf_cart = x_t[-1, :]
         x0_polar = carteisan_to_polar(xf_cart, p_foot, params)
 
         # ground phase
         t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, params)
-        t_span = t_span + t_current
-
-        # convert polar to cartesian
         for i in range(len(x_t)):
-            x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, params)
+            x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, params) # convert polar to cartesian
+    
+        t_span = t_span + t_current
         T.append(t_span)
         X.append(x_t)
-        D.append(D_t)    
+        D.append(D_t)
         t_current += t_span[-1]
 
-        # set the new intial condition
+        # update intial condition for flight phase
         x0 = x_t[-1, :]
 
-        # increment the counter
-        n_apex += 1
+        # if it's the last apex step, terminate at apex
+        if k == N_apex - 1:
+            apex_terminate = True
+        else:
+            apex_terminate = False
 
-    return T, X, D, P
+        # flight phase
+        t_span, x_t, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+
+        t_span = t_span + t_current
+        T.append(t_span)
+        X.append(x_t)
+        A.append(x_apex)
+        D.append(D_t)
+        P.append(p_foot)
+        t_current += t_span[-1]
+
+    return T, X, A, P, D
 
 ######################################################################################
 # CONTROL
@@ -316,22 +344,32 @@ if __name__ == "__main__":
 
     ###########################################################################
 
-
     x0_cart_W = np.array([0.0,  
                           3.0,  
-                          1.0,  
+                          4.0,  
                           0.0]) 
-    N_apex = 20
-    T, X, D, P = slip_prop(x0_cart_W, dt, N_apex, sys_params)
+    N_apex = 10
+    T, X, A, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
+
+    print(len(T))
+    print(len(X))
+    print(len(A))
+    print(len(P))
+    print(len(D))
 
     tf = time.time()
-
     print("Time to run: ", tf - t0)
 
-    # plot some stuff
+    # plot the states
     plt.figure()
     for i in range(len(T)):
-        plt.plot(X[i][:, 0], X[i][:, 1])
+        plt.plot(X[i]
+        [:, 0], X[i][:, 1])
+
+    # plot the apex states
+    for i in range(len(A)):
+        if A[i] is not None:
+            plt.plot(A[i][0], A[i][1], 'rx')
 
     # plot the foot position
     for i in range(len(P)):
@@ -341,3 +379,16 @@ if __name__ == "__main__":
     plt.ylabel('z [m]')
     plt.grid
     plt.show()
+
+    # plot the apex states
+    plt.figure()
+    for i in range(len(A)):
+        if A[i] is not None:
+            plt.plot(A[i][2], A[i][1], 'rx')
+    plt.plot(A[1][2], A[1][1], 'go')
+    plt.plot(A[-1][2], A[-1][1], 'ro')
+    plt.xlabel('vx [m/s]')
+    plt.ylabel('pz [m]')
+    plt.grid
+    plt.show()
+    
