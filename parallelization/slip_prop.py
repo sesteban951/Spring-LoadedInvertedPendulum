@@ -113,7 +113,7 @@ def slip_flight_fwd_prop(x0: np.array,
     alpha = raibert_controller(x0, vx_des, params)
 
     # compute time until apex
-    if vz_0 > 0:
+    if vz_0 >= 0:
         t_apex = vz_0 / params.g  # from vz(t) = vz_0 - g*t
     else:
         t_apex = None
@@ -121,7 +121,7 @@ def slip_flight_fwd_prop(x0: np.array,
     # Apex Condition: if you want to terminate at the apex
     if apex_terminate is True:
         # find the zero velocity time
-        assert vz_0 > 0, "The SLIP z-velocity is not upwwards, therfore no such positive apex time exists."
+        assert vz_0 >= 0, "The SLIP z-velocity is not upwwards, therfore no such positive apex time exists."
         t_terminate = t_apex
 
     # Guard Condition: compute the time until impact
@@ -145,13 +145,15 @@ def slip_flight_fwd_prop(x0: np.array,
     x_t = np.zeros((len(t_span), 4))
 
     # compute the apex state
-    if t_apex is not None:
+    # there exists feasible apex time
+    if t_apex is not None:   
         x_apex = np.array([px_0 + vx_0 * t_apex,
                            pz_0 + vz_0 * t_apex - 0.5 * params.g * t_apex**2,
                            vx_0,
                            vz_0 - params.g * t_apex])
-    else :
-        x_apex = None    
+    # there does not exist feasible apex time
+    else :                   
+        x_apex = np.array([0, 0, 0, 0])
 
     # simulate the flight phase
     for i, t in enumerate(t_span):
@@ -208,9 +210,10 @@ def slip_prop(x0: np.array,
     A.append(x_apex)
     D.append(D_t)
     P.append(p_foot)
-    t_current += t_span[-1]
+    t_current = t_span[-1]
 
     # while not reached the desired number of apex steps
+    # TODO: might be double counting -- the first ground state and the last flight state, vice versa
     for k in range(N_apex):
 
         # set intial condition for ground phase
@@ -221,12 +224,12 @@ def slip_prop(x0: np.array,
         t_span, x_t, D_t = slip_ground_fwd_prop(x0_polar, dt, params)
         for i in range(len(x_t)):
             x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, params) # convert polar to cartesian
-    
         t_span = t_span + t_current
+        
         T.append(t_span)
         X.append(x_t)
         D.append(D_t)
-        t_current += t_span[-1]
+        t_current = t_span[-1]
 
         # update intial condition for flight phase
         x0 = x_t[-1, :]
@@ -246,7 +249,7 @@ def slip_prop(x0: np.array,
         A.append(x_apex)
         D.append(D_t)
         P.append(p_foot)
-        t_current += t_span[-1]
+        t_current = t_span[-1]
 
     return T, X, A, P, D
 
@@ -265,7 +268,7 @@ def raibert_controller(x_flight: np.array,
     vx = x_flight[2]
 
     # compute the desired angle
-    kd = 0.11
+    kd = 0.13
     alpha = -kd * (vx - v_des) 
 
     return alpha
@@ -345,10 +348,10 @@ if __name__ == "__main__":
     ###########################################################################
 
     x0_cart_W = np.array([0.0,  
-                          3.0,  
-                          4.0,  
+                          2.0,  
+                          1.0,  
                           0.0]) 
-    N_apex = 10
+    N_apex = 3
     T, X, A, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
 
     print(len(T))
@@ -359,6 +362,20 @@ if __name__ == "__main__":
 
     tf = time.time()
     print("Time to run: ", tf - t0)
+
+    # convert to CSV for saving
+    T_data = np.hstack(T)
+    X_data = np.vstack(X)
+    A_data = np.vstack(A)
+    P_data = np.vstack(P)
+    D_data = np.vstack(D)
+
+    # save the data
+    np.savetxt("./data/slip_prop_T.csv", T_data, delimiter=",")
+    np.savetxt("./data/slip_prop_X.csv", X_data, delimiter=",")
+    np.savetxt("./data/slip_prop_A.csv", A_data, delimiter=",")
+    np.savetxt("./data/slip_prop_P.csv", P_data, delimiter=",")
+    np.savetxt("./data/slip_prop_D.csv", D_data, delimiter=",")
 
     # plot the states
     plt.figure()
@@ -375,9 +392,9 @@ if __name__ == "__main__":
     for i in range(len(P)):
         plt.plot(P[i][0], P[i][1], 'ro')
 
-    plt.xlabel('x [m]')
-    plt.ylabel('z [m]')
-    plt.grid
+    plt.xlabel('px [m]')
+    plt.ylabel('pz [m]')
+    plt.grid()
     plt.show()
 
     # plot the apex states
@@ -385,10 +402,9 @@ if __name__ == "__main__":
     for i in range(len(A)):
         if A[i] is not None:
             plt.plot(A[i][2], A[i][1], 'rx')
-    plt.plot(A[1][2], A[1][1], 'go')
-    plt.plot(A[-1][2], A[-1][1], 'ro')
+    plt.plot(A[0][2], A[0][1], 'go')
+    plt.plot(A[-1][2], A[-1][1], 'kx')
     plt.xlabel('vx [m/s]')
     plt.ylabel('pz [m]')
-    plt.grid
+    plt.grid()
     plt.show()
-    
