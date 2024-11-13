@@ -67,6 +67,7 @@ def slip_ground_fwd_prop(x0: np.array,
     xk = x0
     dot_product, leg_uncompressed = False, False
     while not (leg_uncompressed * dot_product): # TODO: consider better switching detection
+                                                # Min's suggestion: write the equation h(x)=0 that defines the switching surface and do root finding up to a tolerance
 
         # RK2 integration (in polar coordinates)
         uk = ground_control(xk, params)       # TODO: appropiately choose how to control the leg

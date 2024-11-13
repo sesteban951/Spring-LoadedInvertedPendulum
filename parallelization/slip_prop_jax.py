@@ -33,11 +33,10 @@ class slip_params:
 ######################################################################################
 
 # SLIP flight dynamics (returns in cartesian world frame)
-# @partial(jit, static_argnums=(2, 4))
+@partial(jit, static_argnums=(2, 3))
 def slip_flight_fwd_prop(x0: jnp.array, 
                          alpha: float,
                          dt: float,
-                         apex_terminate: bool,
                          params: slip_params) -> jnp.array:
     """
     Simulate the flight phase of the Spring Loaded Inverted Pendulum (SLIP) model.
@@ -50,65 +49,29 @@ def slip_flight_fwd_prop(x0: jnp.array,
     vx_0 = x0[2]
     vz_0 = x0[3]
 
-    # ensure that the COM is above the ground
-    assert pz_0 > 0, f"The center of mass is under ground. pz = {pz_0}"
+    # Apex condition: compute the apex state, from vz(t) = vz_0 - g*t = 0
+    # NOTE: assumes we are not passed the apex
+    t_apex = vz_0 / params.g 
+    x_apex = jnp.array([px_0 + vx_0 * t_apex,
+                        pz_0 + vz_0 * t_apex - 0.5 * params.g * t_apex**2,
+                        vx_0,
+                        0.0])
+    
+    # compute the time until impact
+    pz_impact = params.l0 * jnp.cos(alpha)
+    a = 0.5 * params.g
+    b = vz_0
+    c = -(pz_0 - pz_impact)
+    s = jnp.sqrt(b**2 - 4*a*c)
+    t1 = (-b + s) / (2*a)
+    t2 = (-b - s) / (2*a)
+    t_terminate = jnp.where(t1 > 0, t1, t2)
+    # t_terminate = lax.stop_gradient(jnp.where(t1 > 0, t1, t2))
 
-    # compute time until apex
-    if vz_0 >= 0:
-        t_apex = vz_0 / params.g  # from vz(t) = vz_0 - g*t
-    else:
-        t_apex = None
-
-    # Apex Condition: if you want to terminate at the apex
-    if apex_terminate is True:
-        # find the zero z-velocity time
-        assert vz_0 >= 0, "The SLIP z-velocity is negative (past the apex), therefore no such positive apex time exists."
-        t_terminate = t_apex
-
-    # Guard Condition: compute the time until impact
-    else:
-        pz_impact = params.l0 * jnp.cos(alpha)
-        a = 0.5 * params.g
-        b = -vz_0
-        c = -(pz_0 - pz_impact)
-        s = jnp.sqrt(b**2 - 4 * a * c)
-        d = 2 * a
-        t1 = (-b + s) / d
-        t2 = (-b - s) / d
-        t_terminate = jnp.maximum(t1, t2)
-        assert t_terminate >= 0, "No impact time exists. Time until impact must be positive or equal to zero."
-        # TODO: implement error handling with bad alphas
-
-    # create a time vector
-    t_span = jnp.arange(0, t_terminate, dt)
-    t_span = jnp.append(t_span, t_terminate)
-    t_span = t_span.reshape(-1, 1)
-
-    # create a trajectory vector
-    x_t = jnp.zeros((len(t_span), 4))
-
-    # there exists apex state
-    if t_apex is not None:   
-        x_apex = jnp.array([px_0 + vx_0 * t_apex,
-                            pz_0 + vz_0 * t_apex - 0.5 * params.g * t_apex**2,
-                            vx_0,
-                            vz_0 - params.g * t_apex])
-    # there does not exist apex state
-    else:                   
-        print("No apex state exists. Returning zeros vector.")
-        x_apex = jnp.array([0, 0, 0, 0])
-
-    # simulate the flight phase
-    for i in range(len(t_span)):
-        # update the state
-        t = t_span[i, 0]
-        x_t = x_t.at[i, 0].set(px_0 + vx_0 * t)                          # pos x
-        x_t = x_t.at[i, 1].set(pz_0 + vz_0 * t - 0.5 * params.g * t**2)  # pos z
-        x_t = x_t.at[i, 2].set(vx_0)                                     # vel x       
-        x_t = x_t.at[i, 3].set(vz_0 - params.g * t)                      # vel z
-
-        # check that the COM is above the ground
-        assert pz_0 > 0, f"The center of mass is under ground. pz = {pz_0}"
+    # generate the time span
+    t_span = jnp.arange(0.0, t_terminate, dt)
+    # t_span = jnp.append(t_span, t_terminate)
+    exit(0)
 
     # generate a control input vector (should be zeros since no control in flight phase)
     u_t = jnp.zeros((len(t_span), 1))
@@ -198,42 +161,5 @@ if __name__ == "__main__":
 
     # simulate the flight phase
     alpha = 0.0
-    t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, alpha, dt, apex_terminate, sys_params)
+    t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, alpha, dt, sys_params)
 
-    # TODO: not returning full arrays somtimes
-    t_span.block_until_ready()
-    x_t.block_until_ready()
-    u_t.block_until_ready()
-    x_apex.block_until_ready()
-    D_t.block_until_ready()
-    p_foot.block_until_ready()
-
-    t_tot = 0.0
-    for i in range(10):
-        
-        t0 = time.time()
-        t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, alpha, dt, apex_terminate, sys_params)
-        
-        # TODO: not returning full arrays somtimes
-        t_span.block_until_ready()
-        x_t.block_until_ready()
-        u_t.block_until_ready()
-        x_apex.block_until_ready()
-        D_t.block_until_ready()
-        p_foot.block_until_ready()
-        
-        t1 = time.time()
-        dt = t1 - t0
-        print(f"Elapsed time: {dt}")
-        t_tot += dt
-
-    print(f"Average time: {t_tot/10}")
-
-    # plot the results
-    plt.figure()
-    plt.plot(x_t[:,0], x_t[:,1], 'b.')
-    plt.plot(p_foot[0], p_foot[1], 'ro')
-    plt.grid()
-    plt.xlabel('px [m]')
-    plt.ylabel('pz [m]')
-    plt.show()
