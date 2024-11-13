@@ -55,9 +55,12 @@ def slip_ground_fwd_prop(x0: np.array,
     """
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
-    # ensure the SLIP hasn't fallen over
-    assert (abs(x0[1]) <= np.pi/2), "The SLIP has fallen over in ground phase. Pole angle is: {:.2f} [deg]".format(x0[1] * 180/np.pi)
-    # TODO: implement error handling when encounter error
+    
+    # handle the crashing error
+    crash = (abs(x0[1]) >= np.pi/2)
+    if crash:
+        print("The SLIP has fallen over in ground phase. Pole angle is: {:.2f} [deg]".format(x0[1] * 180/np.pi))
+        return None, None, None, None
 
     # container for the trajectory, TODO: figure out a static size for the container. Dynamic = bad
     u_t = []
@@ -72,7 +75,7 @@ def slip_ground_fwd_prop(x0: np.array,
                                                 # Min's suggestion: write the equation h(x)=0 that defines the switching surface and do root finding up to a tolerance
 
         # RK2 integration (in polar coordinates)
-        uk = ground_control(xk, params)       # TODO: appropiately choose how to control the leg
+        uk = ground_control(xk, params)       
         f1 = slip_ground_dyn(xk, uk, params)
         f2 = slip_ground_dyn(xk + 0.5 * dt * f1, uk, params)
         xk = xk + dt * f2
@@ -121,8 +124,11 @@ def slip_flight_fwd_prop(x0: np.array,
     vx_0 = x0[2]
     vz_0 = x0[3]
 
-    # ensure that the COM is above the ground
-    assert pz_0 > 0, "The center of mass is under ground. pz = ".format(pz_0)
+    # handle crashing error
+    crash = (pz_0 <= 0)
+    if crash:
+        print("The SLIP has fallen over in flight phase. COM height is: {:.2f} [m]".format(pz_0))
+        return None, None, None, None, None, None, None
 
     # compute a control action for the impact angle
     v_des = 0.0
@@ -136,9 +142,15 @@ def slip_flight_fwd_prop(x0: np.array,
 
     # Apex Condition: if you want to terminate at the apex
     if apex_terminate is True:
+        
         # find the zero velocity time
-        assert vz_0 >= 0, "The SLIP z-velocity is not upwwards, therfore no such positive apex time exists."
-        t_terminate = t_apex
+        no_apex = vz_0 < 0
+        if no_apex:
+            print("The SLIP has no apex time. The z-velocity is not upwards. vz_0 = {:.2f} [m/s]".format(vz_0))
+            print(alpha)
+            return None, None, None, None, None, None, None
+        else:
+            t_terminate = t_apex
 
     # Guard Condition: compute the time until impact
     else:
@@ -151,8 +163,12 @@ def slip_flight_fwd_prop(x0: np.array,
         t1 = (-b + s) / d
         t2 = (-b - s) / d
         t_terminate = max(t1, t2)
-        assert t_terminate >= 0, "No impact time exists. Time until impact must be positive or equal to zero." 
-        # TODO: implement error handling with bad alphas
+
+        # handle when there is no feasible apex time
+        no_impact_time = t_terminate < 0
+        if no_impact_time:
+            print("The SLIP has no impact time. The time until impact is negative. t_impact = {:.2f} [s]".format(t_terminate))
+            return None, None, None, None, None, None, None
 
     # create a time vector
     t_span = np.arange(0, t_terminate, dt)
@@ -197,7 +213,7 @@ def slip_flight_fwd_prop(x0: np.array,
     p_foot = np.array([x_com[0] - params.l0 * np.sin(alpha),
                        x_com[1] - params.l0 * np.cos(alpha)])
 
-    return t_span, x_t, u_t, alpha, x_apex, D_t, p_foot
+    return t_span, x_t,  x_apex, u_t, alpha, D_t, p_foot
 
 # SLIP full propogatoin (returns in cartesian world frame)
 def slip_prop(x0: np.array,
@@ -225,8 +241,11 @@ def slip_prop(x0: np.array,
     apex_terminate = False
     t_current = 0.0
 
-    t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
-    
+    t_span, x_t, x_apex, u_t, alpha, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+    if t_span is None:
+        print("SLIP failure in flight phase.")
+        return None, None, None, None, None, None, None
+
     t_span = t_span + t_current
     T.append(t_span)
     X_state.append(x_t)
@@ -267,7 +286,10 @@ def slip_prop(x0: np.array,
             apex_terminate = False
 
         # flight phase
-        t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+        t_span, x_t, x_apex, u_t, alpha, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+        if t_span is None:
+            print("SLIP failure in flight phase.")
+            return None, None, None, None, None, None, None
 
         t_span = t_span + t_current
         X_state.append(x_t)
@@ -306,7 +328,6 @@ def angle_control(x_flight: np.array,
     mu = 0.0
     sigma = 0.5
     alpha = np.random.normal(mu, sigma)
-    print(alpha)
 
     # saturate the control input
     alpha = np.clip(alpha, params.amin, params.amax)
@@ -399,8 +420,8 @@ if __name__ == "__main__":
                              br = 0.0,    # radialdamping [Ns/m]
                              ba = 0.0,    # angular damping [Ns/m]
                              g  = 9.81,   # gravity [m/s^2]
-                             amax = 1.0,  # max angle control input [rad]
-                             amin = -1.0, # min angle control input [rad]
+                             amax = 1.2,  # max angle control input [rad]
+                             amin = -1.2, # min angle control input [rad]
                              umax = 10.0, # max control input [N]
                              umin = -10.0 # min control input [N]
                             )
@@ -411,13 +432,94 @@ if __name__ == "__main__":
 
     ###########################################################################
 
+    t0 = time.time()
+
     # simulate the SLIP model
     x0_cart_W = np.array([0.0,  
                           2.0,  
-                          1.0,  
+                          0.0,  
                           0.0]) 
-    N_apex = 3
-    T, X_state, X_apex, U_flight, U_ground, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
+    x_apex_des = np.array([0.0,  # pz 
+                           1.0]) # vx
+    
+    # simulation parameters
+    K = 5000         # number of rollouts to simulate
+    counter = 0      # counter for successful simulations
+    counter_tot = 0  # counter for total simulations
+    N_apex = 1       # choose which apex to stop at
+
+    # forward rollout until you get K successful simulations
+    sol_list = []
+    while counter < K:
+
+        # do a forward rollout
+        T, X_state, X_apex, U_flight, U_ground, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
+
+        # check if the simulation was successful
+        if T is None:
+            pass
+        else:
+            sol = (T_, X_state_, X_apex_, U_flight_, U_ground_, P_, D_) = (T, X_state, X_apex, U_flight, U_ground, P, D)
+            sol_list.append(sol)
+            counter += 1
+
+        # increment the total counter
+        counter_tot += 1
+
+    # check which one is the closest to the desired apex state
+    vx_list = []
+    alpha_list = []
+    for i in range(K):
+        
+        # extract the solution of interest
+        sol_i = sol_list[i]
+        
+        # extract the x-velocity
+        X_apex_i = sol_i[2]
+        x_apex_i_last = X_apex_i[-1]
+        vx_i = x_apex_i_last[2]
+        vx_list.append(vx_i)
+
+        # extract the landing angle
+        U_flight_i = sol_i[3]
+        alpha_i = U_flight_i[0]
+        alpha_list.append(alpha_i)
+
+    vx_list = np.array(vx_list)
+    alpha_list = np.array(alpha_list)
+
+    # find best rollout
+    idx = np.argmin(np.abs(vx_list - x_apex_des[1]))
+    T, X_state, X_apex, U_flight, U_ground, P, D = sol_list[idx]
+
+    tf = time.time()
+
+    print("*" * 80)
+    print("The best simulation is: ", idx)
+    print("The desired apex state is: ", x_apex_des)
+    print("The actual apex state is: ", X_apex[-1])
+    print("Simulation time: {:.2f} [s]".format(tf - t0))
+    print("Total number of simulations: ", counter_tot)
+    print("Number of successful simulations: ", counter)
+    print("Percentage of successful simulations: {:.2f} [%]".format(counter / counter_tot * 100))
+
+    ###########################################################################
+
+    # plot a histogram of the x-velocity
+    plt.figure()
+    plt.hist(vx_list, bins=100)
+    plt.xlabel('vx [m/s]')
+    plt.ylabel('Frequency')
+    plt.grid()
+    plt.show()
+
+    # plot a histogram of the landing angle
+    plt.figure()
+    plt.hist(alpha_list, bins=100)
+    plt.xlabel('alpha [rad]')
+    plt.ylabel('Frequency')
+    plt.grid()
+    plt.show()
 
     # plot the states
     plt.figure()
@@ -435,7 +537,7 @@ if __name__ == "__main__":
             vel_scaling = 0.5
             plt.arrow(X_apex[i][0], X_apex[i][1], 
                       X_apex[i][2] * vel_scaling, X_apex[i][3] * vel_scaling, 
-                      head_width=0.05, head_length=0.1, fc='k', ec='k')
+                      head_width=0.05, head_length=0.01, fc='k', ec='k')
 
     # plot the foot position
     for i in range(len(P)):
