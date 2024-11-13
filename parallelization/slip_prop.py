@@ -211,24 +211,26 @@ def slip_prop(x0: np.array,
 
     # container for the trajectory
     # TODO: figure out a static size for the container. Dynamic = bad
-    X = []  # cartesian state
-    U = []  # radial inputs
+    X_state = []  # cartesian state
+    X_apex  = []  # apex states
+    U_ground = [] # radial inputs
+    U_flight = [] # flight landing angle
     T = []  # time
     D = []  # domain
     P = []  # foot position
-    A = []  # apex states
 
     # forward propogate the SLIP model for N_apex discrete steps
     apex_terminate = False
     t_current = 0.0
 
-    t_span, x_t, u_t, _, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+    t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
     
     t_span = t_span + t_current
     T.append(t_span)
-    X.append(x_t)
-    U.append(u_t)
-    A.append(x_apex)
+    X_state.append(x_t)
+    U_ground.append(u_t)
+    U_flight.append(alpha)
+    X_apex.append(x_apex)
     D.append(D_t)
     P.append(p_foot)
     t_current = t_span[-1]
@@ -247,9 +249,9 @@ def slip_prop(x0: np.array,
             x_t[i, :] = polar_to_cartesian(x_t[i, :], p_foot, params) # convert polar to cartesian
         t_span = t_span + t_current
         
+        X_state.append(x_t)
+        U_ground.append(u_t)
         T.append(t_span)
-        X.append(x_t)
-        U.append(u_t)
         D.append(D_t)
         t_current = t_span[-1]
 
@@ -263,18 +265,19 @@ def slip_prop(x0: np.array,
             apex_terminate = False
 
         # flight phase
-        t_span, x_t, u_t, _, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
+        t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, dt, apex_terminate, params)
 
         t_span = t_span + t_current
+        X_state.append(x_t)
+        X_apex.append(x_apex)
+        U_ground.append(u_t)
+        U_flight.append(alpha)
         T.append(t_span)
-        X.append(x_t)
-        U.append(u_t)
-        A.append(x_apex)
         D.append(D_t)
         P.append(p_foot)
         t_current = t_span[-1]
 
-    return T, X, U, A, P, D
+    return T, X_state, X_apex, U_flight, U_ground, P, D
 
 ######################################################################################
 # CONTROL
@@ -303,6 +306,7 @@ def ground_control(xk: np.array,
     Controller for the prismatic joint in the SLIP model during ground phase.
     """
 
+    # TODO: eventually put something here
     u = 0.0
 
     # saturate the control input
@@ -395,45 +399,48 @@ if __name__ == "__main__":
                           2.0,  
                           1.0,  
                           0.0]) 
-    N_apex = 3
-    T, X, U, A, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
+    N_apex = 5
+    T, X_state, X_apex, U_flight, U_ground, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
 
     tf = time.time()
     print("Time to run: ", tf - t0)
 
     # convert to CSV for saving
     T_data = np.vstack(T)
-    X_data = np.vstack(X)
-    U_data = np.vstack(U)
-    A_data = np.vstack(A)
+    X_state_data = np.vstack(X_state)
+    X_apex_data = np.vstack(X_apex)
+    U_flight_data = np.vstack(U_flight)
+    U_ground_data = np.vstack(U_ground)
     P_data = np.vstack(P)
     D_data = np.vstack(D)
 
     # print(T_data.shape)
-    # print(X_data.shape)
-    # print(U_data.shape) 
-    # print(A_data.shape)
+    # print(X_state_data.shape)
+    # print(X_apex_data.shape)
+    # print(U_flight_data.shape)
+    # print(U_ground_data.shape)
     # print(P_data.shape)
     # print(D_data.shape)
 
     # save the data
-    np.savetxt("./data/slip_prop_T.csv", T_data, delimiter=",")
-    np.savetxt("./data/slip_prop_X.csv", X_data, delimiter=",")
-    np.savetxt("./data/slip_prop_X.csv", X_data, delimiter=",")
-    np.savetxt("./data/slip_prop_A.csv", A_data, delimiter=",")
-    np.savetxt("./data/slip_prop_P.csv", P_data, delimiter=",")
-    np.savetxt("./data/slip_prop_D.csv", D_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_T.csv", T_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_X_state.csv", X_state_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_X_apex.csv", X_apex_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_U_flight.csv", U_flight_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_U_ground.csv", U_ground_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_P.csv", P_data, delimiter=",")
+    # np.savetxt("./data/slip_prop_D.csv", D_data, delimiter=",")
 
     # plot the states
     plt.figure()
     for i in range(len(T)):
-        plt.plot(X[i]
-        [:, 0], X[i][:, 1])
+        plt.plot(X_state[i]
+        [:, 0], X_state[i][:, 1])
 
     # plot the apex states
-    for i in range(len(A)):
-        if A[i] is not None:
-            plt.plot(A[i][0], A[i][1], 'rx')
+    for i in range(len(X_apex)):
+        if X_apex[i] is not None:
+            plt.plot(X_apex[i][0], X_apex[i][1], 'rx')
 
     # plot the foot position
     for i in range(len(P)):
@@ -444,14 +451,10 @@ if __name__ == "__main__":
     plt.grid()
     plt.show()
 
-    # plot the apex states
+    # # plot the discrete inputs
     # plt.figure()
-    # for i in range(len(A)):
-    #     if A[i] is not None:
-    #         plt.plot(A[i][2], A[i][1], 'rx')
-    # plt.plot(A[0][2], A[0][1], 'go')
-    # plt.plot(A[-1][2], A[-1][1], 'kx')
-    # plt.xlabel('vx [m/s]')
-    # plt.ylabel('pz [m]')
+    # plt.plot(U_flight, '.')
+    # plt.xlabel('Apex Step')
+    # plt.ylabel('Flight Landing Angle [rad]')
     # plt.grid()
     # plt.show()
