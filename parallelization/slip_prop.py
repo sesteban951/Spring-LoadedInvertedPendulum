@@ -16,6 +16,8 @@ class slip_params:
     br: float    # radial damping coeff, [Ns/m]
     ba: float    # angular damping coeff, [Ns/m]
     g:  float    # gravity, [m/s^2]
+    amax: float  # max angle control input, [rad]
+    amin: float  # min angle control input, [rad]
     umax: float  # max control input, [N]
     umin: float  # min control input, [N]
 
@@ -26,7 +28,7 @@ class slip_params:
 # SLIP ground dynamics (polar coordinates)
 def slip_ground_dyn(xk: np.array,
                     uk: float,
-                    params: slip_params) -> np.array:
+                    params: slip_params):
     """
     Closed form dynamics for the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -49,7 +51,7 @@ def slip_ground_dyn(xk: np.array,
 # SLIP ground dynamics (returns in polar local frame)
 def slip_ground_fwd_prop(x0: np.array, 
                          dt: float, 
-                         params:float) -> np.array:
+                         params:float):
     """
     Simulate the ground phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -107,7 +109,7 @@ def slip_ground_fwd_prop(x0: np.array,
 def slip_flight_fwd_prop(x0: np.array, 
                          dt: float,
                          apex_terminate: bool,
-                         params: slip_params) -> np.array:
+                         params: slip_params):
     """
     Simulate the flight phase of the Spring Loaded Inverted Pendulum (SLIP) model.
     """
@@ -283,7 +285,7 @@ def slip_prop(x0: np.array,
 # CONTROL
 ######################################################################################
 
-# simple leg landing controller # TODO: this will be a normal distirbution
+# simple leg landing controller
 def angle_control(x_flight: np.array,
                   v_des: float,
                   params: slip_params) -> float:
@@ -291,11 +293,23 @@ def angle_control(x_flight: np.array,
     Simple Raibert controller for the SLIP model.
     """
     # unpack the state
+    px = x_flight[0]
+    pz = x_flight[1]
     vx = x_flight[2]
+    vz = x_flight[3]
 
     # compute the desired angle from simple raibert controller
-    kd = 0.13
-    alpha = -kd * (vx - v_des) 
+    # kd = 0.13
+    # alpha = -kd * (vx - v_des) 
+
+    # sample from normal distribution
+    mu = 0.0
+    sigma = 0.5
+    alpha = np.random.normal(mu, sigma)
+    print(alpha)
+
+    # saturate the control input
+    alpha = np.clip(alpha, params.amin, params.amax)
 
     return alpha
 
@@ -381,55 +395,29 @@ if __name__ == "__main__":
     t0 = time.time()
     sys_params = slip_params(m  = 1.0,    # mass [kg]
                              l0 = 1.0,    # leg free length [m]
-                             k  = 500.0,  # leg stiffness [N/m]
+                             k  = 1000.0,  # leg stiffness [N/m]
                              br = 0.0,    # radialdamping [Ns/m]
                              ba = 0.0,    # angular damping [Ns/m]
                              g  = 9.81,   # gravity [m/s^2]
+                             amax = 1.0,  # max angle control input [rad]
+                             amin = -1.0, # min angle control input [rad]
                              umax = 10.0, # max control input [N]
                              umin = -10.0 # min control input [N]
                             )
 
     # simulation parameters
-    dt = 0.005
+    dt = 0.001
     apex_terminate = False
 
     ###########################################################################
 
+    # simulate the SLIP model
     x0_cart_W = np.array([0.0,  
                           2.0,  
                           1.0,  
                           0.0]) 
-    N_apex = 5
+    N_apex = 3
     T, X_state, X_apex, U_flight, U_ground, P, D = slip_prop(x0_cart_W, dt, N_apex, sys_params)
-
-    tf = time.time()
-    print("Time to run: ", tf - t0)
-
-    # convert to CSV for saving
-    T_data = np.vstack(T)
-    X_state_data = np.vstack(X_state)
-    X_apex_data = np.vstack(X_apex)
-    U_flight_data = np.vstack(U_flight)
-    U_ground_data = np.vstack(U_ground)
-    P_data = np.vstack(P)
-    D_data = np.vstack(D)
-
-    # print(T_data.shape)
-    # print(X_state_data.shape)
-    # print(X_apex_data.shape)
-    # print(U_flight_data.shape)
-    # print(U_ground_data.shape)
-    # print(P_data.shape)
-    # print(D_data.shape)
-
-    # save the data
-    # np.savetxt("./data/slip_prop_T.csv", T_data, delimiter=",")
-    # np.savetxt("./data/slip_prop_X_state.csv", X_state_data, delimiter=",")
-    # np.savetxt("./data/slip_prop_X_apex.csv", X_apex_data, delimiter=",")
-    # np.savetxt("./data/slip_prop_U_flight.csv", U_flight_data, delimiter=",")
-    # np.savetxt("./data/slip_prop_U_ground.csv", U_ground_data, delimiter=",")
-    # np.savetxt("./data/slip_prop_P.csv", P_data, delimiter=",")
-    # np.savetxt("./data/slip_prop_D.csv", D_data, delimiter=",")
 
     # plot the states
     plt.figure()
@@ -440,7 +428,14 @@ if __name__ == "__main__":
     # plot the apex states
     for i in range(len(X_apex)):
         if X_apex[i] is not None:
+            
             plt.plot(X_apex[i][0], X_apex[i][1], 'rx')
+
+            # plot an arrow to show the velocity vector
+            vel_scaling = 0.5
+            plt.arrow(X_apex[i][0], X_apex[i][1], 
+                      X_apex[i][2] * vel_scaling, X_apex[i][3] * vel_scaling, 
+                      head_width=0.05, head_length=0.1, fc='k', ec='k')
 
     # plot the foot position
     for i in range(len(P)):
@@ -450,11 +445,3 @@ if __name__ == "__main__":
     plt.ylabel('pz [m]')
     plt.grid()
     plt.show()
-
-    # # plot the discrete inputs
-    # plt.figure()
-    # plt.plot(U_flight, '.')
-    # plt.xlabel('Apex Step')
-    # plt.ylabel('Flight Landing Angle [rad]')
-    # plt.grid()
-    # plt.show()
