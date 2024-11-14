@@ -25,87 +25,48 @@ class slip_params:
     br: float    # radial damping coeff, [Ns/m]
     ba: float    # angular damping coeff, [Ns/m]
     g:  float    # gravity, [m/s^2]
+    amax: float  # max angle control input, [rad]
+    amin: float  # min angle control input, [rad]
     umax: float  # max control input, [N]
     umin: float  # min control input, [N]
+    dt:  float   # integration time step, [s]
 
 ######################################################################################
 # DYNAMICS
 ######################################################################################
 
-# SLIP flight dynamics (returns in cartesian world frame)
+# SLIP flight forward propagation
 @partial(jit, static_argnums=(2, 3))
-def slip_flight_fwd_prop(x0: jnp.array, 
-                         alpha: float,
-                         dt: float,
-                         params: slip_params) -> jnp.array:
-    """
-    Simulate the flight phase of the Spring Loaded Inverted Pendulum (SLIP) model.
-    """
-    # TODO: Consider adding a velocity input in the leg for flight phase.
-
+def slip_flight_fwd_prop(x0: np.array, 
+                         alpha: float, 
+                         dt: float, 
+                         sys_params: slip_params):
+    '''
+    Simulate the flight phase of the SLIP model
+    '''
     # unpack the initial state
-    px_0 = x0[0]  # these are in world frame
-    pz_0 = x0[1]  # these are in world frame
-    vx_0 = x0[2]
-    vz_0 = x0[3]
+    px = x0[0]  # x-pos in world frame
+    pz = x0[1]  # z-pos in world frame
+    vx = x0[2]
+    vz = x0[3]
 
-    # Apex condition: compute the apex state, from vz(t) = vz_0 - g*t = 0
-    # NOTE: assumes we are not passed the apex
-    t_apex = vz_0 / params.g 
-    x_apex = jnp.array([px_0 + vx_0 * t_apex,
-                        pz_0 + vz_0 * t_apex - 0.5 * params.g * t_apex**2,
-                        vx_0,
-                        0.0])
+    # TODO: the branch here is not compatible with JAX
+    # check that the intial z-velocity is positive
+    msg = "Intial Condition Error: z-vel must be greater than zero."
+    def raise_error(x):
+        return x * (-np.inf)
+    def pass_through(x):
+        return x
+    res = lax.cond(vz < 0, raise_error, pass_through, vz) 
+
+    # compute the time until apex and impact
+    t_apex = vz / sys_params.g
+
+    # compute the impact time
+    pz_impact = sys_params.l0 * jnp.cos(alpha)
     
-    # compute the time until impact
-    pz_impact = params.l0 * jnp.cos(alpha)
-    a = 0.5 * params.g
-    b = vz_0
-    c = -(pz_0 - pz_impact)
-    s = jnp.sqrt(b**2 - 4*a*c)
-    t1 = (-b + s) / (2*a)
-    t2 = (-b - s) / (2*a)
-    t_terminate = jnp.where(t1 > 0, t1, t2)
-    # t_terminate = lax.stop_gradient(jnp.where(t1 > 0, t1, t2))
-
-    # generate the time span
-    t_span = jnp.arange(0.0, t_terminate, dt)
-    # t_span = jnp.append(t_span, t_terminate)
-    exit(0)
-
-    # generate a control input vector (should be zeros since no control in flight phase)
-    u_t = jnp.zeros((len(t_span), 1))
-
-    # Domain information (0 for flight phase)
-    D_t = jnp.zeros((len(t_span), 1))
-
-    # compute the final leg position in world frame
-    x_com = x_t[-1, :]     # take the last state as the final state
-    p_foot = jnp.array([x_com[0] - params.l0 * jnp.sin(alpha),
-                        x_com[1] - params.l0 * jnp.cos(alpha)])
-
-    return t_span, x_t, u_t, alpha, x_apex, D_t, p_foot
-
-######################################################################################
-# CONTROL
-######################################################################################
-
-# simple leg landing controller # TODO: this will be a normal distribution
-def angle_control(x_flight: jnp.array,
-                  v_des: float,
-                  params: slip_params) -> float:
-    """
-    Simple Raibert controller for the SLIP model.
-    """
-    # unpack the state
-    vx = x_flight[2]
-
-    # compute the desired angle from simple Raibert controller
-    kd = 0.13
-    alpha = -kd * (vx - v_des) 
-
-    return alpha
-
+    return t_apex
+    
 ######################################################################################
 # TESTING
 ######################################################################################
@@ -147,19 +108,18 @@ if __name__ == "__main__":
                              br = float(0.0),     # radial damping [Ns/m]
                              ba = float(0.0),     # angular damping [Ns/m]
                              g  = float(9.81),    # gravity [m/s^2]
+                             amax = float(1.5),   # max angle control input [rad]
+                             amin = float(-1.5),  # min angle control input [rad]
                              umax = float(10.0),  # max control input [N]
-                             umin = float(-10.0)  # min control input [N]
-                            )
+                             umin = float(-10.0), # min control input [N]
+                             dt = float(0.005)    # time step [s]
+                             )
 
     # intial condition
     x0 = jnp.array([0,  # px
                     3.0,  # pz
                     1.0,  # vx
-                    0.5]) # vz
-    dt = 0.005
-    apex_terminate = False
+                    -0.5]) # vz
 
-    # simulate the flight phase
-    alpha = 0.0
-    t_span, x_t, u_t, alpha, x_apex, D_t, p_foot = slip_flight_fwd_prop(x0, alpha, dt, sys_params)
+    a = slip_flight_fwd_prop(x0, 0.0, sys_params.dt, sys_params)
 

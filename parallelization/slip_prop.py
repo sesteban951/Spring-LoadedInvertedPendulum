@@ -420,8 +420,8 @@ if __name__ == "__main__":
                              br = 0.0,    # radialdamping [Ns/m]
                              ba = 0.0,    # angular damping [Ns/m]
                              g  = 9.81,   # gravity [m/s^2]
-                             amax = 1.2,  # max angle control input [rad]
-                             amin = -1.2, # min angle control input [rad]
+                             amax = 1.5,  # max angle control input [rad]
+                             amin = -1.5, # min angle control input [rad]
                              umax = 10.0, # max control input [N]
                              umin = -10.0 # min control input [N]
                             )
@@ -507,7 +507,7 @@ if __name__ == "__main__":
 
     # plot a histogram of the x-velocity
     plt.figure()
-    plt.hist(vx_list, bins=100)
+    plt.hist(vx_list, bins=25)
     plt.xlabel('vx [m/s]')
     plt.ylabel('Frequency')
     plt.grid()
@@ -515,7 +515,7 @@ if __name__ == "__main__":
 
     # plot a histogram of the landing angle
     plt.figure()
-    plt.hist(alpha_list, bins=100)
+    plt.hist(alpha_list, bins=25)
     plt.xlabel('alpha [rad]')
     plt.ylabel('Frequency')
     plt.grid()
