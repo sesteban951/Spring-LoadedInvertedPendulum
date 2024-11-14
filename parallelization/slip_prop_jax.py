@@ -36,11 +36,10 @@ class slip_params:
 ######################################################################################
 
 # SLIP flight forward propagation
-@partial(jit, static_argnums=(2, 3))
-def slip_flight_fwd_prop(x0: np.array, 
+@partial(jit, static_argnums=(2))
+def slip_flight_fwd_prop(x0: jnp.array, 
                          alpha: float, 
-                         dt: float, 
-                         sys_params: slip_params):
+                         params: slip_params):
     '''
     Simulate the flight phase of the SLIP model
     '''
@@ -54,19 +53,81 @@ def slip_flight_fwd_prop(x0: np.array,
     # check that the intial z-velocity is positive
     msg = "Intial Condition Error: z-vel must be greater than zero."
     def raise_error(x):
-        return x * (-np.inf)
+        return x * (-jnp.inf)
     def pass_through(x):
         return x
     res = lax.cond(vz < 0, raise_error, pass_through, vz) 
 
-    # compute the time until apex and impact
-    t_apex = vz / sys_params.g
+    # compute the time until apex and impact, (vz(t) = vz_0 - g*t)
+    t_apex = vz / params.g
 
-    # compute the impact time
-    pz_impact = sys_params.l0 * jnp.cos(alpha)
-    
-    return t_apex
-    
+    # compute the impact time,  (pz(t) = pz_0 + vz_0*t - 0.5*g*t^2)
+    #                        => 0 = (pz_0 - pz_impact) + vz_0*t_impact - 0.5*g*t_impact^2
+    pz_impact = params.l0 * jnp.cos(alpha)
+    a = -0.5 * params.g
+    b = vz
+    c = pz - pz_impact
+    s = jnp.sqrt(b**2 - 4*a*c)
+    t1 = (-b + s) / (2*a)
+    t2 = (-b - s) / (2*a)
+    t_impact = jnp.maximum(t1, t2)
+
+    # compute the apex state
+    x_apex = jnp.zeros(4)
+    x_apex = x_apex.at[0].set(px + vx * t_apex)
+    x_apex = x_apex.at[1].set(pz + vz * t_apex - 0.5 * params.g * t_apex**2)
+    x_apex = x_apex.at[2].set(vx)
+    x_apex = x_apex.at[3].set(vz - params.g * t_apex)
+
+    # Compute the impact state
+    x_impact = jnp.zeros(4)
+    x_impact = x_impact.at[0].set(px + vx * t_impact)
+    x_impact = x_impact.at[1].set(pz + vz * t_impact - 0.5 * params.g * t_impact**2)
+    x_impact = x_impact.at[2].set(vx)
+    x_impact = x_impact.at[3].set(vz - params.g * t_impact)
+
+    return t_apex, t_impact, x_apex, x_impact
+
+# SLIP ground dynamics
+@ partial(jit, static_argnums=(2))
+def slip_ground_dynamics(x: jnp.array,
+                         u: float,
+                         params: slip_params):
+    '''
+    Ground phase dynamics vector field
+    '''
+    # unpack the state
+    r = x[0]         # leg length
+    theta = x[1]     # leg angle
+    r_dot = x[2]     # leg length rate
+    theta_dot = x[3] # leg angle rate
+
+    # ground phase dynamics
+    xdot = jnp.zeros(4)
+    xdot = xdot.at[0].set(r_dot)
+    xdot = xdot.at[1].set(theta_dot)
+    xdot = xdot.at[2].set(r * theta_dot**2 - params.g*jnp.cos(theta) + (params.k/params.m)*(params.l0 - r) 
+                          - (params.br/params.m)*r_dot + (1/params.m) * u)
+    xdot = xdot.at[3].set(-(2/r) * r_dot*theta_dot + (params.g/r) * jnp.sin(theta) 
+                          - (params.ba/params.m)*theta_dot)
+
+    return xdot
+
+# SLIP ground forward propagation
+# @partial(jit, static_argnums=(2))
+def slip_ground_fwd_prop(x0: jnp.array,
+                         u: jnp.array,
+                         params: slip_params):
+        '''
+        Simulate the ground phase of the SLIP model
+        '''
+        # unpack the initial state
+        r = x0[0]         # leg length
+        theta = x0[1]     # leg angle
+        r_dot = x0[2]     # leg length rate
+        theta_dot = x0[3] # leg angle rate
+
+
 ######################################################################################
 # TESTING
 ######################################################################################
@@ -116,10 +177,13 @@ if __name__ == "__main__":
                              )
 
     # intial condition
-    x0 = jnp.array([0,  # px
-                    3.0,  # pz
-                    1.0,  # vx
-                    -0.5]) # vz
+    x0 = jnp.array([0,     # px
+                    3.0,   # pz
+                    1.0,   # vx
+                    0.5])  # vz
 
-    a = slip_flight_fwd_prop(x0, 0.0, sys_params.dt, sys_params)
-
+    t_apex, t_impact, x_apex, x_impact = slip_flight_fwd_prop(x0, 0.0, sys_params)
+    print(f"t_apex: {t_apex}")
+    print(f"t_impact: {t_impact}")
+    print(f"x_apex: {x_apex}")
+    print(f"x_impact: {x_impact}")
