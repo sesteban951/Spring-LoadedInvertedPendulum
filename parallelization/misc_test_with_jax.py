@@ -36,6 +36,7 @@ def count_with_break_and_save(max_count=10):
     
     return final_results
 
+# https://stackoverflow.com/questions/72515244/how-to-improve-this-toy-jax-optimizer-code-with-while-loops-and-saved-history
 @jax.jit
 def optimizer(x, tol = 1, max_steps = 5):
     
