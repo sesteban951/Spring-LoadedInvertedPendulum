@@ -1,4 +1,3 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 import time
@@ -88,18 +87,16 @@ def slip_flight_fwd_prop(x0: jnp.array,
     t_impact = jnp.maximum(t1, t2)
 
     # compute the apex state
-    x_apex = jnp.zeros(4)
-    x_apex = x_apex.at[0].set(px + vx * t_apex)
-    x_apex = x_apex.at[1].set(pz + vz * t_apex - 0.5 * params.g * t_apex**2)
-    x_apex = x_apex.at[2].set(vx)
-    x_apex = x_apex.at[3].set(vz - params.g * t_apex)
+    x_apex = jnp.array([px + vx * t_apex,
+                        pz + vz * t_apex - 0.5 * params.g * t_apex**2,
+                        vx,
+                        vz - params.g * t_apex])
 
     # Compute the impact state
-    x_impact = jnp.zeros(4)
-    x_impact = x_impact.at[0].set(px + vx * t_impact)
-    x_impact = x_impact.at[1].set(pz + vz * t_impact - 0.5 * params.g * t_impact**2)
-    x_impact = x_impact.at[2].set(vx)
-    x_impact = x_impact.at[3].set(vz - params.g * t_impact)
+    x_impact = jnp.array([px + vx * t_impact,
+                          pz + vz * t_impact - 0.5 * params.g * t_impact**2,
+                          vx,
+                          vz - params.g * t_impact])
 
     return t_apex, t_impact, x_apex, x_impact
 
@@ -118,14 +115,13 @@ def slip_ground_dynamics(x: jnp.array,
     theta_dot = x[3] # leg angle rate
 
     # ground phase dynamics
-    xdot = jnp.zeros(4)
-    xdot = xdot.at[0].set(r_dot)
-    xdot = xdot.at[1].set(theta_dot)
-    xdot = xdot.at[2].set(r * theta_dot**2 - params.g*jnp.cos(theta) + (params.k/params.m)*(params.l0 - r) 
-                          - (params.br/params.m)*r_dot + (1/params.m) * u)
-    xdot = xdot.at[3].set(-(2/r) * r_dot*theta_dot + (params.g/r) * jnp.sin(theta) 
-                          - (params.ba/params.m)*theta_dot)
-
+    xdot = jnp.array([r_dot,
+                      theta_dot,
+                      r * theta_dot**2 - params.g * jnp.cos(theta) + (params.k / params.m) * (params.l0 - r) 
+                      - (params.br / params.m) * r_dot + (1 / params.m) * u,
+                      -(2 / r) * r_dot * theta_dot + (params.g / r) * jnp.sin(theta) 
+                      - (params.ba / params.m) * theta_dot])
+    
     return xdot
 
 # SLIP ground forward propagation
@@ -135,20 +131,36 @@ def slip_ground_fwd_prop(x0: jnp.array,
     '''
     Simulate the ground phase of the SLIP model
     '''
-    
+
+    # boolean function to stop while loop
+    def _condition_fun(args):
+
+        # unpack the arguments
+        _, _, _, _, take_off = args
+
+        return ~take_off
+
     # RK2 integration
-    def _RK2_step(carry, i):
+    def _RK2_step(args):
 
-        # TODO: define some controller here
-        u = 0.0
+        # unpack the arguments
+        i, x_prev, u_t, history, take_off = args
 
-        # do the RK2 step
-        x_prev = carry
+        # get the current control input
+        u = u_t[i]
+
+        # do the RK2 step        
         f1 = slip_ground_dynamics(x_prev, u, params)
         f2 = slip_ground_dynamics(x_prev + 0.5 * params.dt * f1, u, params)
         x_next = x_prev + params.dt * f2
 
-        # compute relevant quantities
+        # print the counter
+        i += 1
+
+        # append to the history
+        history = history.at[i].set(x_next)
+
+        # check if the condition to stop is met
         r = x_next[0]
         theta = x_next[1]
         r_dot = x_next[2]
@@ -165,24 +177,24 @@ def slip_ground_fwd_prop(x0: jnp.array,
         # booleans
         leg_uncompressed = (r >= params.l0)
         ortho_velocity = (jnp.dot(v_com, l_leg) >= 0)
+
+        # check if have hit the switching surface
         take_off = leg_uncompressed & ortho_velocity
-        
-        # jax.debug.print("Iteration: {}", i)
-        # Use jax.debug.print for printing in JAX
-        # jax.debug.print("leg_uncompressed: {}", leg_uncompressed)
-        # jax.debug.print("ortho_velocity: {}", ortho_velocity)    
-        jax.debug.print("take_off: {}", take_off)
-        
-        return x_next, x_next
 
-    # iterate over the RK2 steps
-    N = 500
-    x_last, x_t = lax.scan(_RK2_step, x0, jnp.arange(1, N))
+        return (i, x_next, u_t, history, take_off)
 
-    # take off time
-    t_to = N * params.dt
+    # define max iterations for the while loop
+    max_iters = 250
 
-    return t_to, x_t
+    # define a input signal, counting from 0 to max_iters
+    u_t = jnp.zeros(max_iters)
+    x_t = jnp.full((max_iters,4), jnp.nan)
+    x_t = x_t.at[0].set(x0)
+    res = lax.while_loop(_condition_fun,
+                         _RK2_step,
+                         (0, x0, u_t, x_t, False))
+
+    return res
 
 ######################################################################################
 # TESTING
@@ -232,7 +244,7 @@ if __name__ == "__main__":
                              dt = float(0.005)    # time step [s]
                              )
 
-    # intial condition
+    # flight fowrward propagation
     # x0 = jnp.array([0,     # px
     #                 3.0,   # pz
     #                 1.0,   # vx
@@ -249,15 +261,9 @@ if __name__ == "__main__":
                     0.0,  # theta
                     0.0,  # r_dot
                     0.25]) # theta_dot
-    t_to, x_t = slip_ground_fwd_prop(x0, sys_params)
+    res = slip_ground_fwd_prop(x0, sys_params)
 
+    _, x_final, _, x_t, _ = res
+
+    print(x_t)
     print(x_t.shape)
-
-    # plot the results
-    px = x_t[:,0] * jnp.sin(x_t[:,1])
-    pz = x_t[:,0] * jnp.cos(x_t[:,1])
-    plt.plot(px, pz)
-    plt.plot(px[0], pz[0], 'ro')
-    plt.plot(px[-1], pz[-1], 'bo')
-    plt.plot(0, 0, 'ko')
-    plt.show()
