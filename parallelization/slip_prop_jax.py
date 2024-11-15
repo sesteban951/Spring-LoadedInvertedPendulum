@@ -74,7 +74,7 @@ def slip_flight_fwd_prop(x0: jnp.array,
     t_apex = vz / params.g
 
     # compute the angle of the leg at apex
-    alpha = 0 # TODO: sample this from a distribution
+    alpha = 0.0 # TODO: sample this from a distribution
 
     # compute the impact time,  (pz(t) = pz_0 + vz_0*t - 0.5*g*t^2)
     #                        => 0 = (pz_0 - pz_impact) + vz_0*t_impact - 0.5*g*t_impact^2
@@ -135,7 +135,7 @@ def slip_ground_fwd_prop(x0: jnp.array,
     '''
     Simulate the ground phase of the SLIP model
     '''
-
+    
     # RK2 integration
     def _RK2_step(carry, i):
 
@@ -167,7 +167,7 @@ def slip_ground_fwd_prop(x0: jnp.array,
         ortho_velocity = (jnp.dot(v_com, l_leg) >= 0)
         take_off = leg_uncompressed & ortho_velocity
         
-        jax.debug.print("Iteration: {}", i)
+        # jax.debug.print("Iteration: {}", i)
         # Use jax.debug.print for printing in JAX
         # jax.debug.print("leg_uncompressed: {}", leg_uncompressed)
         # jax.debug.print("ortho_velocity: {}", ortho_velocity)    
@@ -176,11 +176,8 @@ def slip_ground_fwd_prop(x0: jnp.array,
         return x_next, x_next
 
     # iterate over the RK2 steps
-    N = 200
+    N = 500
     x_last, x_t = lax.scan(_RK2_step, x0, jnp.arange(1, N))
-
-    # append the initial state to the trajectory
-    x_t = jnp.vstack([x0, x_t])
 
     # take off time
     t_to = N * params.dt
@@ -236,16 +233,16 @@ if __name__ == "__main__":
                              )
 
     # intial condition
-    x0 = jnp.array([0,     # px
-                    3.0,   # pz
-                    1.0,   # vx
-                    0.5])  # vz
+    # x0 = jnp.array([0,     # px
+    #                 3.0,   # pz
+    #                 1.0,   # vx
+    #                 0.5])  # vz
 
-    t_apex, t_impact, x_apex, x_impact = slip_flight_fwd_prop(x0, 0.0, sys_params)
-    print(f"t_apex: {t_apex}")
-    print(f"t_impact: {t_impact}")
-    print(f"x_apex: {x_apex}")
-    print(f"x_impact: {x_impact}")
+    # t_apex, t_impact, x_apex, x_impact = slip_flight_fwd_prop(x0, 0.0, sys_params)
+    # print(f"t_apex: {t_apex}")
+    # print(f"t_impact: {t_impact}")
+    # print(f"x_apex: {x_apex}")
+    # print(f"x_impact: {x_impact}")
 
     # ground forward propagation
     x0 = jnp.array([1.0,  # r
@@ -256,5 +253,11 @@ if __name__ == "__main__":
 
     print(x_t.shape)
 
-    # print(f"t_to: {t_to}")
-    # print(f"x_t: {x_t}")
+    # plot the results
+    px = x_t[:,0] * jnp.sin(x_t[:,1])
+    pz = x_t[:,0] * jnp.cos(x_t[:,1])
+    plt.plot(px, pz)
+    plt.plot(px[0], pz[0], 'ro')
+    plt.plot(px[-1], pz[-1], 'bo')
+    plt.plot(0, 0, 'ko')
+    plt.show()
