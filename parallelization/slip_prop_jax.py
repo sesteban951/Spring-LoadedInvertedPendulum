@@ -49,7 +49,7 @@ class uniform_dist:
 # SLIP flight forward propagation
 @partial(jit, static_argnums=(2))
 def slip_flight_fwd_prop(x0: jnp.array, 
-                         distribution: uniform_dist,
+                         alpha: float,
                          params: slip_params):
     '''
     Simulate the flight phase of the SLIP model
@@ -72,11 +72,8 @@ def slip_flight_fwd_prop(x0: jnp.array,
     # compute the time until apex and impact, (vz(t) = vz_0 - g*t)
     t_apex = vz / params.g
 
-    # compute the angle of the leg at apex
-    alpha = 0.0 # TODO: sample this from a distribution
-
     # compute the impact time,  (pz(t) = pz_0 + vz_0*t - 0.5*g*t^2)
-    #                        => 0 = (pz_0 - pz_impact) + vz_0*t_impact - 0.5*g*t_impact^2
+    #                         => 0 = (pz_0 - pz_impact) + vz_0*t_impact - 0.5*g*t_impact^2
     pz_impact = params.l0 * jnp.cos(alpha)
     a = -0.5 * params.g
     b = vz
@@ -97,8 +94,12 @@ def slip_flight_fwd_prop(x0: jnp.array,
                           pz + vz * t_impact - 0.5 * params.g * t_impact**2,
                           vx,
                           vz - params.g * t_impact])
-
-    return t_apex, t_impact, x_apex, x_impact
+    
+    # compute the final foot position at impact
+    p_foot = jnp.array([x_impact[0] - params.l0 * jnp.sin(alpha), 
+                        x_impact[1] - params.l0 * jnp.cos(alpha)])
+    
+    return t_apex, t_impact, x_apex, x_impact, p_foot
 
 # SLIP ground dynamics
 @ partial(jit, static_argnums=(2))
@@ -194,7 +195,11 @@ def slip_ground_fwd_prop(x0: jnp.array,
                          _RK2_step,
                          (0, x0, u_t, x_t, False))
 
-    return res
+    # things to return
+    t_span = jnp.arange(0, max_iters) * params.dt
+    _, _, _, x, _ = res
+
+    return t_span, x
 
 ######################################################################################
 # COORDINATE CONVERSION
@@ -299,38 +304,44 @@ if __name__ == "__main__":
                              dt = float(0.005)    # time step [s]
                              )
 
-    # flight fowrward propagation
-    # x0 = jnp.array([0,     # px
-    #                 3.0,   # pz
-    #                 1.0,   # vx
-    #                 0.5])  # vz
+    plt.figure()
+    plt.plot(0, 0, 'ko')
 
-    # t_apex, t_impact, x_apex, x_impact = slip_flight_fwd_prop(x0, 0.0, sys_params)
-    # print(f"t_apex: {t_apex}")
-    # print(f"t_impact: {t_impact}")
-    # print(f"x_apex: {x_apex}")
-    # print(f"x_impact: {x_impact}")
+    # flight fowrward propagation
+    x0_cart = jnp.array([0,     # px
+                         2.0,   # pz
+                         0.0,   # vx
+                         0.0])  # vz
+    alpha = 15 * jnp.pi / 180
+    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_params)
+    plt.plot(x0_cart[0], x0_cart[1], 'ro')
+    plt.plot(x_apex[0], x_apex[1], 'kx')
+    plt.plot(x_impact[0], x_impact[1], 'go')
+    plt.plot(p_foot[0], p_foot[1], 'mo')
 
     # ground forward propagation
-    x0 = jnp.array([1.0,  # r
-                    0.0,  # theta
-                    0.0,  # r_dot
-                    0.25]) # theta_dot
-    res = slip_ground_fwd_prop(x0, sys_params)
-
-    _, x_final, _, x_t, _ = res
-
-    print(x_t)
-    print(x_t.shape)
+    x0_polar = cartesian_to_polar(x_impact, p_foot, sys_params)
+    t_span, x_t = slip_ground_fwd_prop(x0_polar, sys_params)
 
     # extract the non nan values
-    x_final = x_t[~jnp.isnan(x_t).any(axis=1)]
+    x_t = x_t[~jnp.isnan(x_t).any(axis=1)]
 
     # convert all coordinates to cartesian
-    for i in range(x_final.shape[0]):
-        x_final = x_final.at[i, :].set(polar_to_cartesian(x_final[i], jnp.array([0.0, 0.0]), sys_params))
-        
-    # plot the results
-    plt.plot(x_final[:,0], x_final[:,1])
-    plt.show()
+    for i in range(x_t.shape[0]):
+        x_t = x_t.at[i, :].set(polar_to_cartesian(x_t[i], p_foot, sys_params))
+    
+    plt.plot(x_t[:,0], x_t[:,1])
 
+    # flight forward propagation
+    x0_cart = x_t[-1]
+    alpha = -15 * jnp.pi / 180
+    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_params)
+    plt.plot(x0_cart[0], x0_cart[1], 'ro')
+    plt.plot(x_apex[0], x_apex[1], 'kx')
+    plt.plot(x_impact[0], x_impact[1], 'go')
+    plt.plot(p_foot[0], p_foot[1], 'mo')
+
+    # plot the results
+    plt.axis('equal')
+    plt.grid()
+    plt.show()
