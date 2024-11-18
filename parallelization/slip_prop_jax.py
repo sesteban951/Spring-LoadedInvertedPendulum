@@ -197,6 +197,61 @@ def slip_ground_fwd_prop(x0: jnp.array,
     return res
 
 ######################################################################################
+# COORDINATE CONVERSION
+######################################################################################
+
+# Polar to Cartesian
+@partial(jit, static_argnums=(2))
+def polar_to_cartesian(x_polar: np.array,
+                       p_foot_W: np.array,
+                       sys_params: slip_params) -> np.array:
+    """
+    Convert the polar coordinates to cartesian coordinates.
+    """
+    # polar state, x = [r, theta, r_dot, theta_dot]
+    r = x_polar[0]
+    theta = x_polar[1]
+    r_dot = x_polar[2]
+    theta_dot = x_polar[3]
+
+    # foot x-position
+    px_foot = p_foot_W[0]
+
+    # full state in cartesian coordiantes
+    x_cartesian = jnp.array([r * jnp.sin(theta) + px_foot,   # px in world frame
+                             r * jnp.cos(theta),             # pz in world frame 
+                             r_dot * jnp.sin(theta) + r * theta_dot * jnp.cos(theta),  # vx
+                             r_dot * jnp.cos(theta) - r * theta_dot * jnp.sin(theta)]) # vz
+    
+    return x_cartesian
+
+# Cartesian to Polar
+def cartesian_to_polar(x_cartesian: np.array,
+                       p_foot_W: np.array,
+                       sys_params: slip_params) -> np.array:
+    """
+    Convert the cartesian coordinates to polar coordinates.
+    """
+    # COM cartesian state, x = [px, pz, vx, vz]
+    px_com_W = x_cartesian[0]
+    pz_com_W = x_cartesian[1]
+    vx = x_cartesian[2]
+    vz = x_cartesian[3]
+
+    # get leg vector from the COM and foot positions
+    px = px_com_W - p_foot_W[0]
+    pz = pz_com_W - p_foot_W[1]
+
+    # full state in polar coordinates
+    r = jnp.sqrt(px**2 + pz**2)
+    x_cartesian = jnp.array([r,                           # r
+                             jnp.arctan2(px, pz),         # theta
+                             (px * vx + pz * vz) / r,     # r_dot
+                             (pz * vx - px * vz) / r**2]) # theta_dot
+
+    return x_cartesian
+
+######################################################################################
 # TESTING
 ######################################################################################
 
@@ -267,3 +322,15 @@ if __name__ == "__main__":
 
     print(x_t)
     print(x_t.shape)
+
+    # extract the non nan values
+    x_final = x_t[~jnp.isnan(x_t).any(axis=1)]
+
+    # convert all coordinates to cartesian
+    for i in range(x_final.shape[0]):
+        x_final = x_final.at[i, :].set(polar_to_cartesian(x_final[i], jnp.array([0.0, 0.0]), sys_params))
+        
+    # plot the results
+    plt.plot(x_final[:,0], x_final[:,1])
+    plt.show()
+
