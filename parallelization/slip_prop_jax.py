@@ -28,7 +28,13 @@ class slip_params:
     amin: float  # min angle control input, [rad]
     umax: float  # max control input, [N]
     umin: float  # min control input, [N]
-    dt:  float   # integration time step, [s]
+
+# simulation parameters data class
+@struct.dataclass
+class sim_params:
+    dt_flight: float # sampling rate for flight phase
+    dt_ground: float # sampling rate for ground phase
+    N_ground: int    # max number of ground phase samples
 
 # normal distribution data class
 @struct.dataclass
@@ -47,10 +53,11 @@ class uniform_dist:
 ######################################################################################
 
 # SLIP flight forward propagation
-@partial(jit, static_argnums=(2))
+@partial(jit, static_argnums=(2,3))
 def slip_flight_fwd_prop(x0: jnp.array, 
                          alpha: float,
-                         params: slip_params):
+                         params: slip_params,
+                         sim_params: sim_params):
     '''
     Simulate the flight phase of the SLIP model
     '''
@@ -105,7 +112,7 @@ def slip_flight_fwd_prop(x0: jnp.array,
 @ partial(jit, static_argnums=(2))
 def slip_ground_dynamics(x: jnp.array,
                          u: float,
-                         params: slip_params):
+                         params: slip_params) -> jnp.array:
     '''
     Ground phase dynamics vector field
     '''
@@ -126,9 +133,10 @@ def slip_ground_dynamics(x: jnp.array,
     return xdot
 
 # SLIP ground forward propagation
-@partial(jit, static_argnums=(1))
+@partial(jit, static_argnums=(1,2))
 def slip_ground_fwd_prop(x0: jnp.array,
-                         params: slip_params):
+                         params: slip_params,
+                         sim_params: sim_params):
     '''
     Simulate the ground phase of the SLIP model
     '''
@@ -152,8 +160,8 @@ def slip_ground_fwd_prop(x0: jnp.array,
 
         # do the RK2 step        
         f1 = slip_ground_dynamics(x_prev, u, params)
-        f2 = slip_ground_dynamics(x_prev + 0.5 * params.dt * f1, u, params)
-        x_next = x_prev + params.dt * f2
+        f2 = slip_ground_dynamics(x_prev + 0.5 * sim_params.dt_ground * f1, u, params)
+        x_next = x_prev + sim_params.dt_ground * f2
 
         # print the counter
         i += 1
@@ -185,7 +193,7 @@ def slip_ground_fwd_prop(x0: jnp.array,
         return (i, x_next, u_t, history, take_off)
 
     # define max iterations for the while loop
-    max_iters = 250
+    max_iters = sim_params.N_ground
 
     # define a input signal, counting from 0 to max_iters
     u_t = jnp.zeros(max_iters)
@@ -196,7 +204,7 @@ def slip_ground_fwd_prop(x0: jnp.array,
                          (0, x0, u_t, x_t, False))
 
     # things to return
-    t_span = jnp.arange(0, max_iters) * params.dt
+    t_span = jnp.arange(0, max_iters) * sim_params.dt_ground
     _, _, _, x, _ = res
 
     return t_span, x
@@ -206,10 +214,9 @@ def slip_ground_fwd_prop(x0: jnp.array,
 ######################################################################################
 
 # Polar to Cartesian
-@partial(jit, static_argnums=(2))
+@jit
 def polar_to_cartesian(x_polar: np.array,
-                       p_foot_W: np.array,
-                       sys_params: slip_params) -> np.array:
+                       p_foot_W: np.array) -> np.array:
     """
     Convert the polar coordinates to cartesian coordinates.
     """
@@ -231,9 +238,9 @@ def polar_to_cartesian(x_polar: np.array,
     return x_cartesian
 
 # Cartesian to Polar
+@jit
 def cartesian_to_polar(x_cartesian: np.array,
-                       p_foot_W: np.array,
-                       sys_params: slip_params) -> np.array:
+                       p_foot_W: np.array) -> np.array:
     """
     Convert the cartesian coordinates to polar coordinates.
     """
@@ -291,18 +298,25 @@ if __name__ == "__main__":
     ######################################################################################
 
     # Define the system parameters with jnp.float32 for compatibility with JAX
-    sys_params = slip_params(m  = float(1.0),     # mass [kg]
-                             l0 = float(1.0),     # leg free length [m]
-                             k  = float(500.0),   # leg stiffness [N/m]
-                             br = float(0.0),     # radial damping [Ns/m]
-                             ba = float(0.0),     # angular damping [Ns/m]
-                             g  = float(9.81),    # gravity [m/s^2]
-                             amax = float(1.5),   # max angle control input [rad]
-                             amin = float(-1.5),  # min angle control input [rad]
-                             umax = float(10.0),  # max control input [N]
-                             umin = float(-10.0), # min control input [N]
-                             dt = float(0.005)    # time step [s]
-                             )
+    sys_param = slip_params(m  = float(1.0),     # mass [kg]
+                            l0 = float(1.0),     # leg free length [m]
+                            k  = float(500.0),   # leg stiffness [N/m]
+                            br = float(0.0),     # radial damping [Ns/m]
+                            ba = float(0.0),     # angular damping [Ns/m]
+                            g  = float(9.81),    # gravity [m/s^2]
+                            amax = float(1.5),   # max angle control input [rad]
+                            amin = float(-1.5),  # min angle control input [rad]
+                            umax = float(10.0),  # max control input [N]
+                            umin = float(-10.0), # min control input [N]
+                            )
+    
+    # Define the simulation parameters
+    sim_param = sim_params(dt_flight = float(0.005),  # sampling rate for flight phase
+                           dt_ground = float(0.005),  # sampling rate for ground phase
+                           N_ground = int(250)    # number of ground phase samples
+                           )
+
+    ######################################################################################
 
     plt.figure()
     plt.plot(0, 0, 'ko')
@@ -313,29 +327,29 @@ if __name__ == "__main__":
                          0.0,   # vx
                          0.0])  # vz
     alpha = 15 * jnp.pi / 180
-    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_params)
+    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
     plt.plot(x0_cart[0], x0_cart[1], 'ro')
     plt.plot(x_apex[0], x_apex[1], 'kx')
     plt.plot(x_impact[0], x_impact[1], 'go')
     plt.plot(p_foot[0], p_foot[1], 'mo')
 
     # ground forward propagation
-    x0_polar = cartesian_to_polar(x_impact, p_foot, sys_params)
-    t_span, x_t = slip_ground_fwd_prop(x0_polar, sys_params)
+    x0_polar = cartesian_to_polar(x_impact, p_foot)
+    t_span, x_t = slip_ground_fwd_prop(x0_polar, sys_param, sim_param)
 
     # extract the non nan values
     x_t = x_t[~jnp.isnan(x_t).any(axis=1)]
 
     # convert all coordinates to cartesian
     for i in range(x_t.shape[0]):
-        x_t = x_t.at[i, :].set(polar_to_cartesian(x_t[i], p_foot, sys_params))
+        x_t = x_t.at[i, :].set(polar_to_cartesian(x_t[i], p_foot))
     
     plt.plot(x_t[:,0], x_t[:,1])
 
     # flight forward propagation
     x0_cart = x_t[-1]
     alpha = -15 * jnp.pi / 180
-    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_params)
+    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
     plt.plot(x0_cart[0], x0_cart[1], 'ro')
     plt.plot(x_apex[0], x_apex[1], 'kx')
     plt.plot(x_impact[0], x_impact[1], 'go')
