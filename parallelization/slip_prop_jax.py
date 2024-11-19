@@ -377,21 +377,43 @@ if __name__ == "__main__":
                          0.0,   # vx
                          0.0])  # vz
     alpha = 15 * jnp.pi / 180
-    
-    t0 = time.time()
-    t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
-    x0_polar = cartesian_to_polar(x_impact, p_foot)
-    t_takeoff, x_takeoff, t_span, x_t = slip_ground_fwd_prop(x0_polar, p_foot, sys_param, sim_param)
-    t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t = slip_flight_fwd_prop(x_takeoff, -alpha, sys_param, sim_param)
-    tf = time.time()
-    dt = tf - t0
-    print(f"Simulation time: {dt} seconds")
 
-    t0 = time.time()
-    t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
-    x0_polar = cartesian_to_polar(x_impact, p_foot)
-    t_takeoff, x_takeoff, t_span, x_t = slip_ground_fwd_prop(x0_polar, p_foot, sys_param, sim_param)
-    t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t = slip_flight_fwd_prop(x_takeoff, -alpha, sys_param, sim_param)
-    tf = time.time()
-    dt = tf - t0
-    print(f"Simulation time: {dt} seconds")
+    N_sims = 2500
+    T = np.zeros(N_sims)
+    for i in range(N_sims):
+        t0 = time.time()
+        t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
+        t_apex.block_until_ready()
+        x_apex.block_until_ready()
+        t_impact.block_until_ready()
+        x_impact.block_until_ready()
+        p_foot.block_until_ready()
+        t_span.block_until_ready()
+        x_t.block_until_ready()
+        p_foot_t.block_until_ready()
+
+        x0_polar = cartesian_to_polar(x_impact, p_foot).block_until_ready()
+        t_takeoff, x_takeoff, t_span, x_t = slip_ground_fwd_prop(x0_polar, p_foot, sys_param, sim_param)
+        t_takeoff.block_until_ready()
+        x_takeoff.block_until_ready()
+        t_span.block_until_ready()
+        x_t.block_until_ready()
+
+        t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t = slip_flight_fwd_prop(x_takeoff, -alpha, sys_param, sim_param)
+        t_apex.block_until_ready()
+        x_apex.block_until_ready()
+        t_impact.block_until_ready()
+        x_impact.block_until_ready()
+        p_foot.block_until_ready()
+        t_span.block_until_ready()
+        x_t.block_until_ready()
+        p_foot_t.block_until_ready()
+
+        tf = time.time()
+        dt = tf - t0
+        T[i] = dt
+        print(f"Simulation time: {dt} seconds")
+
+    print(f"Average simulation time: {np.mean(T)} seconds")
+    print(f"Max simulation time: {np.max(T)} seconds")
+    print(f"Min simulation time: {np.min(T)} seconds")
