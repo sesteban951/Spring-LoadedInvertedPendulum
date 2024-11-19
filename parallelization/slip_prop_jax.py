@@ -34,6 +34,7 @@ class slip_params:
 class sim_params:
     dt_flight: float # sampling rate for flight phase
     dt_ground: float # sampling rate for ground phase
+    N_flight: int    # max number of flight phase samples
     N_ground: int    # max number of ground phase samples
 
 # normal distribution data class
@@ -67,17 +68,14 @@ def slip_flight_fwd_prop(x0: jnp.array,
     vx = x0[2]
     vz = x0[3]
 
-    # TODO: the branch here is not compatible with JAX
-    # check that the intial z-velocity is positive
-    msg = "Intial Condition Error: z-vel must be greater than zero."
-    def raise_error(x):
-        return x * (-jnp.inf)
-    def pass_through(x):
-        return x
-    res = lax.cond(vz < 0, raise_error, pass_through, vz) 
-
     # compute the time until apex and impact, (vz(t) = vz_0 - g*t)
     t_apex = vz / params.g
+
+    # compute the apex state
+    x_apex = jnp.array([px + vx * t_apex,
+                        pz + vz * t_apex - 0.5 * params.g * t_apex**2,
+                        vx,
+                        vz - params.g * t_apex])
 
     # compute the impact time,  (pz(t) = pz_0 + vz_0*t - 0.5*g*t^2)
     #                         => 0 = (pz_0 - pz_impact) + vz_0*t_impact - 0.5*g*t_impact^2
@@ -90,12 +88,6 @@ def slip_flight_fwd_prop(x0: jnp.array,
     t2 = (-b - s) / (2*a)
     t_impact = jnp.maximum(t1, t2)
 
-    # compute the apex state
-    x_apex = jnp.array([px + vx * t_apex,
-                        pz + vz * t_apex - 0.5 * params.g * t_apex**2,
-                        vx,
-                        vz - params.g * t_apex])
-
     # Compute the impact state
     x_impact = jnp.array([px + vx * t_impact,
                           pz + vz * t_impact - 0.5 * params.g * t_impact**2,
@@ -105,8 +97,59 @@ def slip_flight_fwd_prop(x0: jnp.array,
     # compute the final foot position at impact
     p_foot = jnp.array([x_impact[0] - params.l0 * jnp.sin(alpha), 
                         x_impact[1] - params.l0 * jnp.cos(alpha)])
+
+    # boolean function to stop the while loop
+    def _condition_fun(args):
+
+        # unpack the arguments
+        _, _, _, impact = args
+
+        return ~impact
     
-    return t_apex, t_impact, x_apex, x_impact, p_foot
+    # main loop to simulate the flight phase
+    def _compute_state(args):
+
+        # unpack the arguments
+        i, x_t, p_foot_t, impact = args
+
+        # current time
+        t = i * sim_params.dt_flight
+
+        # update the state
+        x_k = jnp.array([px + vx * t,
+                         pz + vz * t - 0.5 * params.g * t**2,
+                         vx,
+                         vz - params.g * t])
+        
+        # update the foot position
+        p_foot_k = jnp.array([x_k[0] - params.l0 * jnp.sin(alpha), 
+                              x_k[1] - params.l0 * jnp.cos(alpha)])
+        
+        # insert the state into the array
+        x_t = x_t.at[i].set(x_k)
+        p_foot_t = p_foot_t.at[i].set(p_foot_k)
+
+        # compute if we have reached the impact
+        impact = (t >= t_impact)
+
+        # increment the counter
+        i += 1
+
+        return (i, x_t, p_foot_t, impact)
+    
+    # loop to populate the arrays
+    res = lax.while_loop(_condition_fun,
+                         _compute_state,
+                         (0, 
+                         jnp.full((sim_params.N_flight,4), jnp.nan), 
+                         jnp.full((sim_params.N_flight,2), jnp.nan), 
+                         False))
+    
+    # unpack the results
+    t_span = jnp.arange(0, sim_params.N_flight) * sim_params.dt_flight
+    _, x_t, p_foot_t, _ = res
+
+    return t_apex, x_apex, t_impact, x_impact, p_foot, t_span, x_t, p_foot_t
 
 # SLIP ground dynamics
 @ partial(jit, static_argnums=(2))
@@ -153,7 +196,7 @@ def slip_ground_fwd_prop(x0: jnp.array,
     def _RK2_step(args):
 
         # unpack the arguments
-        i, x_prev, u_t, history, take_off = args
+        i, x_prev, u_t, x_t, take_off = args
 
         # get the current control input
         u = u_t[i]
@@ -167,7 +210,7 @@ def slip_ground_fwd_prop(x0: jnp.array,
         i += 1
 
         # append to the history
-        history = history.at[i].set(x_next)
+        x_t = x_t.at[i].set(x_next)
 
         # check if the condition to stop is met
         r = x_next[0]
@@ -190,24 +233,27 @@ def slip_ground_fwd_prop(x0: jnp.array,
         # check if have hit the switching surface
         take_off = leg_uncompressed & ortho_velocity
 
-        return (i, x_next, u_t, history, take_off)
+        return (i, x_next, u_t, x_t, take_off)
 
     # define max iterations for the while loop
     max_iters = sim_params.N_ground
 
     # define a input signal, counting from 0 to max_iters
-    u_t = jnp.zeros(max_iters)
-    x_t = jnp.full((max_iters,4), jnp.nan)
-    x_t = x_t.at[0].set(x0)
     res = lax.while_loop(_condition_fun,
                          _RK2_step,
-                         (0, x0, u_t, x_t, False))
+                         (0,
+                          x0,
+                          jnp.zeros(max_iters),
+                          jnp.full((max_iters,4), jnp.nan),
+                         False))
 
     # things to return
+    iters, x_takeoff, _, x_t, _ = res
+    t_takeoff = iters * sim_params.dt_ground
     t_span = jnp.arange(0, max_iters) * sim_params.dt_ground
-    _, _, _, x, _ = res
+    x_t = x_t.at[0].set(x0)
 
-    return t_span, x
+    return t_takeoff, x_takeoff, t_span, x_t
 
 ######################################################################################
 # COORDINATE CONVERSION
@@ -256,12 +302,12 @@ def cartesian_to_polar(x_cartesian: np.array,
 
     # full state in polar coordinates
     r = jnp.sqrt(px**2 + pz**2)
-    x_cartesian = jnp.array([r,                           # r
-                             jnp.arctan2(px, pz),         # theta
-                             (px * vx + pz * vz) / r,     # r_dot
-                             (pz * vx - px * vz) / r**2]) # theta_dot
+    x_polar = jnp.array([r,                # r
+              jnp.arctan2(px, pz),         # theta
+              (px * vx + pz * vz) / r,     # r_dot
+              (pz * vx - px * vz) / r**2]) # theta_dot
 
-    return x_cartesian
+    return x_polar
 
 ######################################################################################
 # TESTING
@@ -313,7 +359,8 @@ if __name__ == "__main__":
     # Define the simulation parameters
     sim_param = sim_params(dt_flight = float(0.005),  # sampling rate for flight phase
                            dt_ground = float(0.005),  # sampling rate for ground phase
-                           N_ground = int(250)    # number of ground phase samples
+                           N_flight = int(150),       # number of flight phase samples
+                           N_ground = int(150)        # number of ground phase samples
                            )
 
     ######################################################################################
@@ -327,7 +374,7 @@ if __name__ == "__main__":
                          0.0,   # vx
                          0.0])  # vz
     alpha = 15 * jnp.pi / 180
-    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
+    t_apex, x_apex, t_impact, x_impact, p_foot, _, _, _ = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
     plt.plot(x0_cart[0], x0_cart[1], 'ro')
     plt.plot(x_apex[0], x_apex[1], 'kx')
     plt.plot(x_impact[0], x_impact[1], 'go')
@@ -335,7 +382,7 @@ if __name__ == "__main__":
 
     # ground forward propagation
     x0_polar = cartesian_to_polar(x_impact, p_foot)
-    t_span, x_t = slip_ground_fwd_prop(x0_polar, sys_param, sim_param)
+    _, _, t_span, x_t = slip_ground_fwd_prop(x0_polar, sys_param, sim_param)
 
     # extract the non nan values
     x_t = x_t[~jnp.isnan(x_t).any(axis=1)]
@@ -349,7 +396,7 @@ if __name__ == "__main__":
     # flight forward propagation
     x0_cart = x_t[-1]
     alpha = -15 * jnp.pi / 180
-    t_apex, t_impact, x_apex, x_impact, p_foot = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
+    t_apex, x_apex, t_impact, x_impact, p_foot, _, _, _ = slip_flight_fwd_prop(x0_cart, alpha, sys_param, sim_param)
     plt.plot(x0_cart[0], x0_cart[1], 'ro')
     plt.plot(x_apex[0], x_apex[1], 'kx')
     plt.plot(x_impact[0], x_impact[1], 'go')
