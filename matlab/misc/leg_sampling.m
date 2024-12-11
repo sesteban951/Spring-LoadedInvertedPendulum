@@ -7,8 +7,8 @@ r = 1.0;
 N = 1000;
 
 % for uniform sampling
-lb = [-15, -45]; % lower bound
-ub = [15, 45];   % upper bound
+lb = [-45, -45]; % lower bound
+ub = [45, 45];   % upper bound
 angles = [unifrnd(lb(1), ub(1), 1, N);
 unifrnd(lb(2), ub(2), 1, N)]';
 
@@ -50,9 +50,16 @@ quiver3(0, 0, 0, 0, 0, 1, 'b', 'LineWidth', 2);
 % sphere
 [X_sphere, Y_sphere, Z_sphere] = sphere;
 surf(X_sphere, Y_sphere, Z_sphere, 'FaceAlpha', 0.1, 'EdgeAlpha', 0.1);
-view(45,30);
 
 % plot the leg positions
 plot3([0, 0], [0, 0], [0, 0], 'k.', 'MarkerSize', 20);
 plot3([0, 0], [0, 0], [0, -r], 'k--', 'LineWidth', 2);
 plot3(l_final(:, 1), l_final(:, 2), l_final(:, 3), 'r.', 'MarkerSize', 10);
+
+% animate the rotation
+for i = 1:2
+    for az = 0:360
+        view(az, 30); % rotate around the z-axis
+        pause(0.05); % pause to control the speed of rotation
+    end
+end
