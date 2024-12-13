@@ -1,5 +1,7 @@
 **/build/
+**/.vscode/
 **/*.mp4
 **/*.avi
 **/*.TXT
 **/*.csv
+**/*.bak

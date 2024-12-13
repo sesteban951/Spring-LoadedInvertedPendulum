@@ -6,23 +6,23 @@ clear all; close all; clc;
 % system parameters
 params.m = 1.0;  % mass 
 params.g = 9.81; % gravity
-params.k = 10;  % spring constant
+params.k = 25;  % spring constant
 params.l0 = 1.0; % free length of the leg
 params.b = 0.5;  % damping coefficient
-params.d = 2.0;  % distance between the legs
+params.d = -2.0;  % distance between the legs
 d = params.d;
 
 % intial conditions
 x0 = [1;   % r
       pi/2;  % theta
-      0;     % rdot
-      1.0];  % thetadot
+      1.0;     % rdot
+      0.0];  % thetadot
 
 % time span
-rt = 2.00;         % real time rate multiplier
-f = 40;            % frequency, [Hz]
+rt = 1.00;         % real time rate multiplier
+f = 200;            % frequency, [Hz]
 dt = 1/(f);        % time step, [s]
-tmax = 10.0;        % max time, [s]
+tmax = 5.0;        % max time, [s]
 tspan = 0:dt:tmax; % time span, [s]
 
 [dgdr, dgdt] = make_lagrangian_gradients(params);
@@ -31,6 +31,7 @@ tspan = 0:dt:tmax; % time span, [s]
 % val2 = [eval_dgdr(x0, d, params), eval_dgdt(x0, d, params)];
 
 % solve the dynamics
+options = odeset('RelTol', 1e-12, 'AbsTol', 1e-12);
 [t, x] = ode45(@(t, x) dynamics(t, x, params, dgdr, dgdt), tspan, x0);
 
 % get right leg position
@@ -44,6 +45,9 @@ end
 for i = 1:length(t)
     x(i, :) = polart_to_cartesian(x(i, :));
 end
+
+% save the data into a csv
+csvwrite('data/lagrange.csv', [t, x]);
 
 % plot the data
 figure('Name', 'Animation', 'Position', [100, 100, 1200, 800]);
