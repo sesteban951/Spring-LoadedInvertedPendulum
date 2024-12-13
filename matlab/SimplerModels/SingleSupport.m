@@ -106,6 +106,7 @@ function xdot = dynamics(t, x, params)
             -2*rdot*thetadot/r + g*sin(theta)/r];
 end
 
+% convert the polar coordinates to cartesian
 function x_cart = polart_to_cartesian(x_polar)
     
     % unpack the state
