@@ -6,7 +6,7 @@ clear all; close all; clc;
 % system parameters
 params.m = 1.0;  % mass 
 params.g = 9.81; % gravity
-params.k = 25;  % spring constant
+params.k = 10;  % spring constant
 params.l0 = 1.0; % free length of the leg
 params.b = 0.5;  % damping coefficient
 params.d = 2.0;  % distance between the legs
@@ -15,14 +15,14 @@ d = params.d;
 % intial conditions
 x0 = [1;   % r
       pi/2;  % theta
-      1;     % rdot
-      0.0];  % thetadot
+      0;     % rdot
+      1.0];  % thetadot
 
 % time span
-rt = 1.00;         % real time rate multiplier
-f = 60;            % frequency, [Hz]
+rt = 2.00;         % real time rate multiplier
+f = 40;            % frequency, [Hz]
 dt = 1/(f);        % time step, [s]
-tmax = 5.0;        % max time, [s]
+tmax = 10.0;        % max time, [s]
 tspan = 0:dt:tmax; % time span, [s]
 
 [dgdr, dgdt] = make_lagrangian_gradients(params);
@@ -127,9 +127,9 @@ function xdot = dynamics(t, x, params, dgdr, dgdt)
     thetadot = x(4);
 
     % get lagrangian gradients
-    % dgdr_ = eval_dgdr(x, d, params);
-    % dgdt_ = eval_dgdt(x, d, params);
-    dgdr_ = dgdr(r, theta);
+    % dgdr_ = eval_dgdr(x, params); % Made using maple (less robust)
+    % dgdt_ = eval_dgdt(x, params);
+    dgdr_ = dgdr(r, theta);  % made using symbolic toolbox (better)
     dgdt_ = dgdt(r, theta);
 
     % compute the accelerations
@@ -193,44 +193,32 @@ function [dgdr, dgdt] = make_lagrangian_gradients(params)
     dgdt = matlabFunction(dgdt_, 'vars', {'r', 'theta'});
 end
 
-% function dgdr = eval_dgdr(x, d, params)
-%     % Compute the value of the mathematical expression:
-%     %
-%     % -\frac{k (sin(theta) d - r)}{2 cos(theta) r \sqrt{(d^2 - 2 sin(theta) d r + r^2) / (r^2 (cos(theta))^2)}}
-%     %
+% compute force along the other leg
+function dgdr = eval_dgdr(x, params)
 
-%     % define the variables
-%     k = params.k;
+    % define the variables
+    k = params.k;
+    d = params.d;
+    l0 = params.l0;
 
-%     % extract the state
-%     r = x(1);
-%     theta = x(2);
+    % extract the state
+    r = x(1);
+    theta = x(2);
 
-%     term1 = (sin(theta) * d - r) / (r * cos(theta));
-%     sqrt_term = sqrt((d^2 - 2 * sin(theta) * d * r + r^2) / (r^2 * (cos(theta))^2));
-%     term2 = r * cos(theta) * sqrt_term - l0;
-%     term3 = 1 / sqrt_term;
-    
-%     dgdr = k * term1 * term2 * term3;
-% end
+    dgdr = k * (sin(theta) * d - r) * (-l0 + sqrt(d^2 - 2 * sin(theta) * d * r + r^2)) * (1 / sqrt(d^2 - 2 * sin(theta) * d * r + r^2));
+end
 
-% % function dgdt = eval_dgdt(k, theta, d, r)
-% function dgdt = eval_dgdt(x, d, params)
-%     % Compute the value of the mathematical expression:
-%     %
-%     % -\frac{kd}{2\sqrt{(d^2 - 2 sin(theta) dr + r^2) / (r^2 (cos(theta))^2)}}
-%     %
+% compute torque about the other leg
+function dgdt = eval_dgdt(x, params)
 
-%     % define the variables
-%     k = params.k;
+    % define the variables
+    k = params.k;
+    d = params.d;
+    l0 = params.l0;
 
-%     % extract the state
-%     r = x(1);
-%     theta = x(2);
+    % extract the state
+    r = x(1);
+    theta = x(2);
 
-%     sqrt_term = sqrt((d^2 - 2 * sin(theta) * d * r + r^2) / (r^2 * (cos(theta))^2));
-%     term1 = r * cos(theta) * sqrt_term - l0;
-%     term2 = 1 / sqrt_term;
-    
-%     dgdt = k * d * term1 * term2;
-% end
+    dgdt = k * d * r * cos(theta) * (-l0 + sqrt(d^2 - 2 * sin(theta) * d * r + r^2)) * (1 / sqrt(d^2 - 2 * sin(theta) * d * r + r^2));
+end
