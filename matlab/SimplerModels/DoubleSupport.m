@@ -6,29 +6,39 @@ clear all; close all; clc;
 % system parameters
 params.m = 1.0;  % mass 
 params.g = 9.81; % gravity
-params.k = 10;  % spring constant
-params.l0 = 0.5; % free length of the leg
+params.k = 25;  % spring constant
+params.l0 = 1.0; % free length of the leg
+params.b = 0.5;  % damping coefficient
+params.d = 2.0;  % distance between the legs
+d = params.d;
 
 % intial conditions
-x0 = [0.5;   % r
-      pi/2;     % theta
-      0;     % rdot
+x0 = [1;   % r
+      pi/2;  % theta
+      1;     % rdot
       0.0];  % thetadot
-d = 1.0;
 
 % time span
-f = 40;            % frequency, [Hz]
+rt = 1.00;         % real time rate multiplier
+f = 60;            % frequency, [Hz]
 dt = 1/(f);        % time step, [s]
 tmax = 5.0;        % max time, [s]
 tspan = 0:dt:tmax; % time span, [s]
 
-[dgdr1, dgdt1] = make_lagrangian_gradients(params);
+[dgdr, dgdt] = make_lagrangian_gradients(params);
 
-val1 = [dgdr1(x0(1), x0(2), d), dgdt1(x0(1), x0(2), d)];
-val2 = [eval_dgdr(x0, d, params), eval_dgdt(x0, d, params)];
+% val1 = [dgdr1(x0(1), x0(2)), dgdt1(x0(1), x0(2))];
+% val2 = [eval_dgdr(x0, d, params), eval_dgdt(x0, d, params)];
 
 % solve the dynamics
-[t, x] = ode45(@(t, x) dynamics(t, x, d, params, dgdr1, dgdt1), tspan, x0);
+[t, x] = ode45(@(t, x) dynamics(t, x, params, dgdr, dgdt), tspan, x0);
+
+% get right leg position
+p_R = zeros(length(t), 2);
+for i = 1:length(t)
+    [px, pz] = right_leg_position(x(i, :), params);
+    p_R(i, 1:2) = [px, pz];
+end
 
 % convert to cartesian
 for i = 1:length(t)
@@ -36,21 +46,23 @@ for i = 1:length(t)
 end
 
 % plot the data
-figure('Name', 'Animation');
+figure('Name', 'Animation', 'Position', [100, 100, 1200, 800]);
 set(0, 'DefaultFigureRenderer', 'painters');
 
 subplot(2, 2, 1);
-quiver(x(1:end-1, 1), x(1:end-1, 2), diff(x(:, 1)), diff(x(:, 2)), 'r', 'LineWidth', 1);
+% quiver(x(1:end-1, 1), x(1:end-1, 2), diff(x(:, 1)), diff(x(:, 2)), 'r', 'LineWidth', 1);
+plot(t, x(:, 1), 'b', 'LineWidth', 1);
 xline(0, '--');
 yline(0, '--');
-xlabel('px'); ylabel('py');
+xlabel('t'); ylabel('px');
 grid on; axis equal;
 
 subplot(2, 2, 3);
-quiver(x(1:end-1, 3), x(1:end-1, 4), diff(x(:, 3)), diff(x(:, 4)), 'r', 'LineWidth', 1);
+% quiver(x(1:end-1, 3), x(1:end-1, 4), diff(x(:, 3)), diff(x(:, 4)), 'r', 'LineWidth', 1);
+plot(t, x(:, 2), 'b', 'LineWidth', 1);
 xline(0, '--');
 yline(0, '--');
-xlabel('vx'); ylabel('vy');
+xlabel('t'); ylabel('pz');
 grid on; axis equal;
 
 subplot(2, 2, [2,4]);
@@ -58,15 +70,19 @@ hold on;
 plot([-0.1, 0.1], [0, 0], 'k', 'LineWidth', 2);
 xlabel('px'); ylabel('py');
 grid on; axis equal;
-xlim([-2, 2]);
-ylim([-2, 2]);
+xlim([-4, 4]);
+ylim([-4, 4]);
 
 tic;
 ind = 1;
+t = t * (1/rt);
 while true
 
-    % draw the pole
-    pole = plot([0, x(ind, 1)], [0, x(ind, 2)], 'k', 'LineWidth', 2);
+    % draw the left leg
+    left_leg = plot([0, x(ind, 1)], [0, x(ind, 2)], 'k', 'LineWidth', 2);
+
+    % draw the right leg
+    right_leg = plot([d, p_R(ind, 1)], [0, p_R(ind, 2)], 'b', 'LineWidth', 2);
 
     % draw the ball mass
     mass = plot(x(ind, 1), x(ind, 2), 'ko', 'MarkerSize', 20, 'MarkerFaceColor', [0.8500 0.3250 0.0980]	);
@@ -74,7 +90,7 @@ while true
     drawnow;
 
     % put the time in the title
-    msg = sprintf('Time: %.2f sec', t(ind));
+    msg = sprintf('Time: %.2f sec', t(ind) * rt);
     title(msg);
 
     % wait until the next time step
@@ -87,7 +103,8 @@ while true
         break;
     else
         ind = ind + 1;
-        delete(pole);
+        delete(left_leg);
+        delete(right_leg)
         delete(mass);
     end
 end
@@ -95,7 +112,7 @@ end
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % double support dynamics
-function xdot = dynamics(t, x, d, params, dgdr, dgdt)
+function xdot = dynamics(t, x, params, dgdr, dgdt)
 
     % unpack the parameters
     m = params.m;
@@ -110,10 +127,10 @@ function xdot = dynamics(t, x, d, params, dgdr, dgdt)
     thetadot = x(4);
 
     % get lagrangian gradients
-    dgdr_ = eval_dgdr(x, d, params);
-    dgdt_ = eval_dgdt(x, d, params);
-    % dgdr_ = dgdr(r, theta, d);
-    % dgdt_ = dgdt(r, theta, d);
+    % dgdr_ = eval_dgdr(x, d, params);
+    % dgdt_ = eval_dgdt(x, d, params);
+    dgdr_ = dgdr(r, theta);
+    dgdt_ = dgdt(r, theta);
 
     % compute the accelerations
     xdot = [rdot; 
@@ -139,59 +156,81 @@ function x_cart = polart_to_cartesian(x_polar)
     
 end
 
+% compute the end effector position of the right leg
+function [px, pz] = right_leg_position(x_polar, params)
+    
+    % extract the geometry
+    rL = x_polar(1);
+    thetaL = x_polar(2);
+    d = params.d;
+
+    % from holonomic constraint
+    thetaR = atan((rL*sin(thetaL) - d) / (rL*cos(thetaL)));
+    rR = rL * cos(thetaL) / cos(thetaR);
+    
+    % compute the positions
+    px = d + rR * sin(thetaR);
+    pz = rR * cos(thetaR);
+
+end
+
 % make lagrangian gradients
 function [dgdr, dgdt] = make_lagrangian_gradients(params)
 
     % unpack the parameters
     k = params.k;
     l0 = params.l0;
+    d = params.d;
 
-    syms r theta d
-    term = atan((r*sin(theta) -d)/ (r*cos(theta)));
-    g = -(1/2) * k * (l0 - (r*cos(theta))/(cos(term)));
+    syms r theta
+    term = atan2((r*sin(theta) -d) , (r*cos(theta)));
+    g = -(1/2) * k * (l0 - (r*cos(theta))/(cos(term)))^2;
 
     dgdr_ = diff(g, r);
     dgdt_ = diff(g, theta);
 
-    dgdr = matlabFunction(dgdr_, 'vars', {'r', 'theta', 'd'});
-    dgdt = matlabFunction(dgdt_, 'vars', {'r', 'theta', 'd'});
+    dgdr = matlabFunction(dgdr_, 'vars', {'r', 'theta'});
+    dgdt = matlabFunction(dgdt_, 'vars', {'r', 'theta'});
 end
 
-function dgdr = eval_dgdr(x, d, params)
-    % Compute the value of the mathematical expression:
-    %
-    % -\frac{k (sin(theta) d - r)}{2 cos(theta) r \sqrt{(d^2 - 2 sin(theta) d r + r^2) / (r^2 (cos(theta))^2)}}
-    %
+% function dgdr = eval_dgdr(x, d, params)
+%     % Compute the value of the mathematical expression:
+%     %
+%     % -\frac{k (sin(theta) d - r)}{2 cos(theta) r \sqrt{(d^2 - 2 sin(theta) d r + r^2) / (r^2 (cos(theta))^2)}}
+%     %
 
-    % define the variables
-    k = params.k;
+%     % define the variables
+%     k = params.k;
 
-    % extract the state
-    r = x(1);
-    theta = x(2);
+%     % extract the state
+%     r = x(1);
+%     theta = x(2);
 
-    numerator = k * (sin(theta) * d - r);
-    denominator = 2 * cos(theta) * r * sqrt((d^2 - 2 * sin(theta) * d * r + r^2) / (r^2 * (cos(theta))^2));
+%     term1 = (sin(theta) * d - r) / (r * cos(theta));
+%     sqrt_term = sqrt((d^2 - 2 * sin(theta) * d * r + r^2) / (r^2 * (cos(theta))^2));
+%     term2 = r * cos(theta) * sqrt_term - l0;
+%     term3 = 1 / sqrt_term;
     
-    dgdr = -numerator / denominator;
-end
+%     dgdr = k * term1 * term2 * term3;
+% end
 
-% function dgdt = eval_dgdt(k, theta, d, r)
-function dgdt = eval_dgdt(x, d, params)
-    % Compute the value of the mathematical expression:
-    %
-    % -\frac{kd}{2\sqrt{(d^2 - 2 sin(theta) dr + r^2) / (r^2 (cos(theta))^2)}}
-    %
+% % function dgdt = eval_dgdt(k, theta, d, r)
+% function dgdt = eval_dgdt(x, d, params)
+%     % Compute the value of the mathematical expression:
+%     %
+%     % -\frac{kd}{2\sqrt{(d^2 - 2 sin(theta) dr + r^2) / (r^2 (cos(theta))^2)}}
+%     %
 
-    % define the variables
-    k = params.k;
+%     % define the variables
+%     k = params.k;
 
-    % extract the state
-    r = x(1);
-    theta = x(2);
+%     % extract the state
+%     r = x(1);
+%     theta = x(2);
 
-    numerator = k * d;
-    denominator = 2 * sqrt((d^2 - 2 * sin(theta) * d * r + r^2) / (r^2 * (cos(theta))^2));
+%     sqrt_term = sqrt((d^2 - 2 * sin(theta) * d * r + r^2) / (r^2 * (cos(theta))^2));
+%     term1 = r * cos(theta) * sqrt_term - l0;
+%     term2 = 1 / sqrt_term;
     
-    dgdt = -numerator / denominator;
-end
+%     dgdt = k * d * term1 * term2;
+% end
