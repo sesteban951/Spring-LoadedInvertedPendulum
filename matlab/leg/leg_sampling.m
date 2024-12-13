@@ -14,7 +14,7 @@ unifrnd(lb(2), ub(2), 1, N)]';
 
 % for normal sampling
 mu = [0; 0];            % mean
-sigma = diag([15^2, 15^2]); % covaraince
+sigma = diag([45^2, 45^2]); % covaraince
 angles = mvnrnd(mu, sigma, N);
 
 % convert to radians
@@ -57,9 +57,9 @@ plot3([0, 0], [0, 0], [0, -r], 'k--', 'LineWidth', 2);
 plot3(l_final(:, 1), l_final(:, 2), l_final(:, 3), 'r.', 'MarkerSize', 10);
 
 % animate the rotation
-for i = 1:2
+for i = 1:1
     for az = 0:360
         view(az, 30); % rotate around the z-axis
-        pause(0.05); % pause to control the speed of rotation
+        pause(0.03); % pause to control the speed of rotation
     end
 end

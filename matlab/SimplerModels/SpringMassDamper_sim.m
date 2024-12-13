@@ -12,7 +12,7 @@ sys.l0 = 0.4;  % nominal length
 
 % mpc parameters
 mpc.K = 100;     % number of rollouts
-mpc.N = 100;     % number of time steps
+mpc.N = 300;     % number of time steps
 mpc.dt = 0.01;   % time step
 mpc.mu = 0;      % mean
 mpc.sigma = 0.1; % standard deviation
@@ -24,66 +24,69 @@ tspan = 0:mpc.dt:mpc.dt*(mpc.N-1);
 x0 = [0.5; % inital position 
       0.0]; % initial velocity
 
+% simulate the system 
+u_t = [tspan', 0*ones(mpc.N, 1)];
+[t, x] = ode45(@(t, x) dynamics(t, x, u_t, sys), tspan, x0);
 
-% % plot the results
-% figure('Name', 'Spring-Mass-Damper Simulation');
+% plot the results
+figure('Name', 'Spring-Mass-Damper Simulation');
 
-% subplot(3, 2, 1);
-% plot(t, x(:, 1), 'LineWidth', 2);
-% xlabel('Time [s]');
-% ylabel('Position [m]');
-% grid on;
+subplot(3, 2, 1);
+plot(t, x(:, 1), 'LineWidth', 2);
+xlabel('Time [s]');
+ylabel('Position [m]');
+grid on;
 
-% subplot(3, 2, 3);
-% plot(t, x(:, 2), 'LineWidth', 2);
-% xlabel('Time [s]');
-% ylabel('Velocity [m/s]');
-% grid on;
+subplot(3, 2, 3);
+plot(t, x(:, 2), 'LineWidth', 2);
+xlabel('Time [s]');
+ylabel('Velocity [m/s]');
+grid on;
 
-% subplot(3, 2, 5);
-% plot(u_t(:,1),u_t(:,2), 'LineWidth', 2);
-% xlabel('Time [s]');
-% ylabel('Control [N]');
-% grid on;
+subplot(3, 2, 5);
+plot(u_t(:,1),u_t(:,2), 'LineWidth', 2);
+xlabel('Time [s]');
+ylabel('Control [N]');
+grid on;
 
-% subplot(3, 2, [2,4,6]);
-% hold on;
-% yline(0); 
-% yline(0.75, '--');
-% yline(-0.75, '--');
-% ylabel('Position [m]');
-% axis equal; grid on;
+subplot(3, 2, [2,4,6]);
+hold on;
+yline(0); 
+yline(0.75, '--');
+yline(-0.75, '--');
+ylabel('Position [m]');
+axis equal; grid on;
 
-% tic;
-% ind = 1;
-% while 1==1
+tic;
+ind = 1;
+while 1==1
 
-%     % draw the mass spring damper system
-%     pole = plot([0, 0], [0, x(ind, 1)], 'k', 'LineWidth', 2);
+    % draw the mass spring damper system
+    pole = plot([0, 0], [0, x(ind, 1)], 'k', 'LineWidth', 2);
     
-%     box_center = [0; x(ind, 1)];
-%     box = rectangle('Position', [box_center(1)-0.1, box_center(2)-0.1, 0.2, 0.2], 'Curvature', 0.1, 'FaceColor', 'r');
+    box_center = [0; x(ind, 1)];
+    box = rectangle('Position', [box_center(1)-0.1, box_center(2)-0.1, 0.2, 0.2], 'Curvature', 0.1, 'FaceColor', 'r');
     
-%     drawnow;
+    drawnow;
 
-%     % put the time in the title
-%     msg = sprintf('Time: %.2f sec', t(ind));
-%     title(msg);
+    % put the time in the title
+    msg = sprintf('Time: %.2f sec', t(ind));
+    title(msg);
 
-%     % wait until the next time step
-%     while toc < t(ind+1)
-%         % end
-%     end
+    % wait until the next time step
+    while toc < t(ind+1)
+        % end
+    end
 
-%     % increment the index
-%     if ind+1 >= length(t)
-%         break;
-%     else
-%         ind = ind + 1;
-%         delete(pole);
-%         delete(box);
-%     end
-% end
+    % increment the index
+    if ind+1 >= length(t)
+        break;
+    else
+        ind = ind + 1;
+        delete(pole);
+        delete(box);
+    end
+end
 
 % perform a rollout
 function [x_t, u_t] = rollout(x0, u_t, sys)

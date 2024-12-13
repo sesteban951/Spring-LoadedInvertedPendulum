@@ -18,7 +18,7 @@ class LegSensor():
         self.x_foot = None  # foot state: x, z, xdot, zdot (in world frame) 
 
         # domain
-        self.D = None       # domain of the leg (flight, ground)
+        self.D = None       # domain of the leg (flight = 0, ground = 1)
 
     # update the states
     def update_state(self, x_com, x_leg):
@@ -49,6 +49,24 @@ class LegSensor():
 
         # update the foot state
         self.x_foot = np.array([px_foot, pz_foot, vx_foot, vz_foot])
+
+    # update the domain the leg is in
+    def update_domain(self, D):
+        self.D = D
+
+    # check the switching manifold
+    def S_TD(self, ):
+
+        # relevant foot states
+        pz_foot = self.x_foot[1]
+        vz_foot = self.x_foot[3]
+
+        # check the switching manifold
+        if (pz_foot <= 0) and (vz_foot < 0):
+            return True
+        else:
+            return False
+
 
 class DynamicsIntegrator():
     """
@@ -118,21 +136,26 @@ if __name__ == "__main__":
     dt = 0.01
     d = DynamicsIntegrator(t0, tf, dt)
 
+    # create the leg sensor
+    l = LegSensor()
+
     # initial conditions
     x0_com = np.array([0,   # px
                        3,   # pz
                        0.5, # vx
                        0])  # vz
-
-    # create the leg sensor
-    l = LegSensor()
-    x0_leg = np.array([1,    # r
-                       0.15, # theta
+    x0_leg = np.array([0.414,    # r
+                       0.837758, # theta
                        0,    # rdot
                        0])   # thetadot
 
+    # update the states
+    l.update_state(x0_com, x0_leg)
+    l.update_domain(0) # in flight
+    x0_foot = l.x_foot
+
     # analytical flight
-    x_t = d.parabolic_traj(x0_com)    
+    # x_t = d.parabolic_traj(x0_com)
 
     # numerical flight
     t_span = np.arange(t0, tf, dt)
@@ -142,17 +165,36 @@ if __name__ == "__main__":
     X_foot = np.zeros((len(t_span), 4))
     
     X_com[0, :] = x0_com
+    X_leg[0, :] = x0_leg
+    X_foot[0, :] = x0_foot
+
     xk_com = x0_com
+    xk_leg = x0_leg
+    xk_foot = x0_foot
+
     for i in range(len(t_span)):
+        
+        # iterate until done
         if i == len(t_span) - 1:
             break
+        
+        # update the states
         xk_com = d.RK2_step(0, xk_com, 0.0, d.flight_dynamics)
+        xk_leg = x0_leg
+        l.update_state(xk_com, xk_leg)
+        xk_foot = l.x_foot
+
+
         X_com[i+1, :] = xk_com
+        X_leg[i+1, :] = xk_leg
+        X_foot[i+1, :] = xk_foot
 
     # plot the trajecotry
     plt.figure()
-    plt.plot(x_t[:, 0], x_t[:, 1])
+    # plt.plot(x_t[:, 0], x_t[:, 1])
     plt.plot(X_com[:, 0], X_com[:, 1])
+    plt.plot(X_foot[:, 0], X_foot[:, 1])
+
+    plt.grid()
+    plt.axis('equal')
     plt.show()
-
-
