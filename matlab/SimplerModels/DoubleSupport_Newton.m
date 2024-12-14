@@ -6,27 +6,27 @@ clear all; close all; clc;
 % system parameters
 params.m = 1.0;  % mass 
 params.g = 9.81; % gravity
-params.k = 25;  % spring constant
+params.k = 150;  % spring constant
 params.l0 = 1.0; % free length of the leg
-params.b = 0.5;  % damping coefficient
+params.b = 15.0;  % damping coefficient
 params.p1 = [0; 0]; % left leg position
-params.p2 = [-2; 0]; % right leg position
+params.p2 = [2; 0]; % right leg position
 
 % intial conditions
-x0 = [1;    % px
-      0;    % pz
-      1.0;    % vx
-      0]; % vz
+x0 = [1;   % px
+      2;   % pz
+      0;   % vx
+      0];  % vz
 
 % time span
 rt = 1.0;         % real time rate multiplier
-f = 200;            % frequency, [Hz]
+f = 60;            % frequency, [Hz]
 dt = 1/(f);        % time step, [s]
-tmax = 5.0;        % max time, [s]
+tmax = 7.0;        % max time, [s]
 tspan = 0:dt:tmax; % time span, [s]
 
 % solve the dynamics
-options = odeset('RelTol', 1e-12, 'AbsTol', 1e-12);
+options = odeset('RelTol', 1e-9, 'AbsTol', 1e-9);
 [t, x] = ode45(@(t, x) dynamics(t, x, params), tspan, x0);
 
 % save the data into a csv
@@ -54,10 +54,18 @@ subplot(2, 2, [2,4]);
 hold on;
 plot(params.p1(1), params.p1(2), 'kx', 'MarkerSize', 10);
 plot(params.p2(1), params.p2(2), 'kx', 'MarkerSize', 10);
+xline(0, '--');
+yline(0, '--');
 xlabel('px'); ylabel('py');
+
+px_min = min(x(:, 1));
+px_max = max(x(:, 1));
+pz_min = min(x(:, 2));
+pz_max = max(x(:, 2));
 grid on; axis equal;
-xlim([-4, 4]);
-ylim([-4, 4]);
+xlim([px_min-1, px_max+1]);
+ylim([pz_min-1, pz_max+1]);
+
 
 tic;
 ind = 1;
@@ -102,6 +110,7 @@ function xdot = dynamics(t, x, params)
     m = params.m;
     g = params.g;
     k = params.k;
+    b = params.b;
     l0 = params.l0;
     p1 = params.p1;
     p2 = params.p2;
@@ -118,8 +127,14 @@ function xdot = dynamics(t, x, params)
     r1_hat = r1/r1_norm;
     r2_hat = r2/r2_norm;
     
+    % compute control effort
+    u1 = -50;
+    u2 = 50;
+
     % compute the dynamics
-    a_com = r1_hat * (k/m) * (l0 - r1_norm) + r2_hat * (k/m) * (l0 - r2_norm) + [0; -g];
+    a_com = r1_hat * ((k/m) * (l0 - r1_norm) - (b/m) * (v_com' * r1) / r1_norm + (1/m) * u1) ...
+          + r2_hat * ((k/m) * (l0 - r2_norm) - (b/m) * (v_com' * r2) / r2_norm + (1/m) * u2) ...
+          + [0; -g];
     xdot = [v_com; a_com];
 
 end
