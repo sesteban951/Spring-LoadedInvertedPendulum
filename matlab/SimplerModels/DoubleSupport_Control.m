@@ -7,25 +7,29 @@ clear all; close all; clc;
 params.m = 25.0;   % mass 
 params.g = 9.81;   % gravity
 params.l0 = 1.5;   % free length of the leg
-params.k = 5000;  % spring constant
+params.k = 4000;  % spring constant
 params.b = 10.0;    % damping coefficient
 params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position
 
 % SPC parameters
-spc.K = 1000;  % number of rollouts
-spc.dt = 0.04; % time step
-spc.N = 300;    % prediction horizon
-spc.Q = diag([1, 1, 1, 1]); % state cost
-spc.R = diag([1, 1]);       % control cost
-spc.Qf = diag([100, 100, 100, 100]); % final state cost
+spc.K = 3000;  % number of rollouts
+spc.dt = 0.02; % time step
+spc.N = 25;    % prediction horizon
+spc.Q = diag([10, 30, 0.1, 0.1]); % state cost
+spc.R = diag([0.0, 0.0]);       % control cost
+spc.Qf = diag([30, 50, 10, 10]); % final state cost
+spc.n_elite = 1; % number of elite rollouts (Note: why does it suck with n =/= 1?)
+spc.n_iters = 15; % number of CE-M iterations
 
-% distribution parameters
+% initial distribution parameters
+distr.type = 'G'; % distribution type, 'G' (gaussian) or 'U' (uniform)
 distr.mu = [0; 0];
-distr.Sigma = diag([100^2, 100^2]);
+distr.Sigma = diag([1000^2, 1000^2]);
+distr.Unif = [-50; 50];
 
 % simulation params
-rt = 1.0;         % real time rate multiplier
+rt = 0.25;         % real time rate multiplier
 animate = 1;
 
 % intial conditions
@@ -36,15 +40,13 @@ x0 = [0.25;    % px
 
 % desired state
 x_des = [0.25; 
-         1.45; 
+         1.0; 
          0; 
          0];
 
-% perform a dynamics rollout
-u = sample_input(spc, distr);
-[t, x] = RK3_rollout(x0, u, params, spc);
+% monte carlo simulation
+[t, x, u] = simulate(x0, x_des, params, spc, distr);
 
-J = eval_cost(x_des, x, u, spc);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -56,6 +58,7 @@ if animate == 1
     subplot(2, 3, 1);
     hold on;
     plot(t, x(:, 1), 'b', 'LineWidth', 1);
+    yline(x_des(1), '--', 'Desired');
     xline(0, '--');
     yline(0, '--');
     xlabel('t'); ylabel('px');
@@ -64,6 +67,7 @@ if animate == 1
     subplot(2, 3, 2);
     hold on;
     plot(t, x(:, 2), 'b', 'LineWidth', 1);
+    yline(x_des(2), '--', 'Desired');
     xline(0, '--');
     yline(0, '--');
     xlabel('t'); ylabel('pz');
@@ -72,6 +76,7 @@ if animate == 1
     subplot(2, 3, 4);
     hold on;
     plot(t, x(:, 3), 'b', 'LineWidth', 1);
+    yline(x_des(3), '--', 'Desired');
     xline(0, '--');
     yline(0, '--');
     xlabel('t'); ylabel('vx');
@@ -80,6 +85,7 @@ if animate == 1
     subplot(2, 3, 5);
     hold on;
     plot(t, x(:, 4), 'b', 'LineWidth', 1);
+    yline(x_des(4), '--', 'Desired');
     xline(0, '--');
     yline(0, '--');
     xlabel('t'); ylabel('vz');
@@ -218,6 +224,77 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+function [t, x_star, u_star] = simulate(x0, xdes, params, spc, distr)
+
+    % unpack the SPC parameters
+    n_elite = spc.n_elite;
+    n_iters = spc.n_iters;
+
+    for i = 1:n_iters
+
+        % display some info
+        disp('-----------------------------------');
+        fprintf('Iteration: %d \n', i);
+        fprintf('Mean: ');
+        distr.mu
+        fprintf('Sigma: ');
+        distr.Sigma
+
+        % monte carlo simulation of K trajectories
+        [X, U, J] = monte_carlo(x0, xdes, params, spc, distr);
+
+        % sort from lowest cost to highest
+        [~, idx] = sort(J, "ascend");
+        U = U(:, :, idx);
+
+        % pick the top elite input samples
+        u_elite = U(:, :, 1:n_elite);
+        u_mean = mean(u_elite, 3);
+        
+        % update the parametric distribution
+        distr.mu = mean(u_mean)';
+        distr.Sigma = cov(u_mean);
+    end
+
+    % stuff to return
+    t = 0:spc.dt:spc.dt*(spc.N-1);
+    X = X(:, :, idx);
+    U = U(:, :, idx);
+    x_star = X(:, :, 1);
+    u_star = U(:, :, 1);
+end
+
+% monte carlo simualtion
+function [X, U, J] = monte_carlo(x0, xdes, params, spc, distr)
+
+    % mpc parameters
+    N = spc.N;
+    K = spc.K;
+
+    % make containers
+    X = zeros(N, 4, K);   % store the state trajectories
+    U = zeros(N-1, 2, K); % store the control trajectories
+    J = zeros(K, 1);      % store the costs
+
+    % simualte a rollout
+    for k = 1:K
+
+        % sample the input
+        u = sample_input(spc, distr);
+
+        % perform a dynamics rollout
+        [t, x] = RK3_rollout(x0, u, params, spc);
+
+        % compute the cost
+        c = eval_cost(xdes, x, u, spc);
+
+        % store the data
+        X(:, :, k) = x;
+        U(:, :, k) = u;
+        J(k) = c;
+    end
+end
+
 % comptue cost
 function J = eval_cost(xdes, x, u, spc)
 
@@ -231,9 +308,13 @@ function J = eval_cost(xdes, x, u, spc)
     % NOTE: cost can be anything
     stage_cost = 0;
     for i = 1:N-1
+        % compute the state cost
         state_cost = (x(i, :)' - xdes)' * Q * (x(i, :)' - xdes);
-        % control_cost = u(i, :) * R * u(i, :)';
-        control_cost = 0;
+        
+        % control the control cost
+        control_cost = u(i, :) * R * u(i, :)';
+
+        % accumulate the stage cost
         stage_cost = state_cost + control_cost + stage_cost;
     end
 
@@ -247,11 +328,10 @@ end
 % sample an input given a disitrbution
 function u = sample_input(spc, distr)
 
-    % unpack the parameters
-    N = spc.N;
-    mu = distr.mu;
-    Sigma = distr.Sigma;
-    
     % sample the input
-    u = mvnrnd(mu, Sigma, N-1);
+    if distr.type == 'U'
+        u = unifrnd(distr.Unif(1), distr.Unif(2), spc.N-1, 2);
+    elseif distr.type == 'G'
+        u = mvnrnd(distr.mu, distr.Sigma, spc.N-1);
+    end
 end
