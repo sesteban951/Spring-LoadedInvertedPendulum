@@ -256,7 +256,7 @@ function [t, x] = RK2(tspan, x0, params)
         dt = t(k+1) - t(k);
 
         % RK2 integration
-        f1 = dynamics(t(k), x(k, :), params);
+        f1 = dynamics(t(k), xk, params);
         f2 = dynamics(t(k) + 0.5*dt, xk + 0.5*dt*f1 ,params);
         xk = xk + dt*f2;
 
@@ -283,7 +283,7 @@ function [t, x] = RK3(tspan, x0, params)
         dt = t(k+1) - t(k);
 
         % RK3 integration
-        f1 = dynamics(t(k), x(k, :), params);
+        f1 = dynamics(t(k), xk, params);
         f2 = dynamics(t(k) + 0.5*dt, xk + 0.5*dt*f1, params);
         f3 = dynamics(t(k) + dt, xk - dt*f1 + 2*dt*f2, params);
         xk = xk + (dt/6)*(f1 + 4*f2 + f3);
@@ -312,7 +312,7 @@ function [t, x] = RK4(tspan, x0, params)
         dt = t(k+1) - t(k);
 
         % RK4 integration
-        f1 = dynamics(t(k), x(k, :), params);
+        f1 = dynamics(t(k), xk, params);
         f2 = dynamics(t(k) + 0.5*dt, xk + 0.5*dt*f1 ,params);
         f3 = dynamics(t(k) + 0.5*dt, xk + 0.5*dt*f2 ,params);
         f4 = dynamics(t(k) + dt, xk + dt*f3 ,params);
