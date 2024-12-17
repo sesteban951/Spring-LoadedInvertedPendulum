@@ -1,5 +1,5 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Double Support system with Sampling Predictive Control (SPC)
+% Double Support system with CE-M
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all; close all; clc;
 
@@ -8,29 +8,30 @@ params.m = 25.0;   % mass
 params.g = 9.81;   % gravity
 params.l0 = 1.5;   % free length of the leg
 params.k = 4000;  % spring constant
-params.b = 10.0;    % damping coefficient
+params.b = 400.0;    % damping coefficient
 params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position
 
 % SPC parameters
-spc.K = 3000;  % number of rollouts
-spc.dt = 0.02; % time step
-spc.N = 25;    % prediction horizon
+spc.K = 500;  % number of rollouts
+spc.dt = 0.01; % time step
+spc.N = 50;    % prediction horizon
 spc.Q = diag([10, 30, 0.1, 0.1]); % state cost
-spc.R = diag([0.0, 0.0]);       % control cost
-spc.Qf = diag([30, 50, 10, 10]); % final state cost
-spc.n_elite = 1; % number of elite rollouts (Note: why does it suck with n =/= 1?)
-spc.n_iters = 15; % number of CE-M iterations
+spc.R = diag([0., 0.]);       % control cost
+spc.Qf = diag([30, 50, 1, 1]); % final state cost
+spc.n_elite = 2; % number of elite rollouts (Note: why does it suck with n =/= 1?)
+spc.n_iters = 25; % number of CE-M iterations
 
 % initial distribution parameters
-distr.type = 'G'; % distribution type, 'G' (gaussian) or 'U' (uniform)
-distr.mu = [0; 0];
-distr.Sigma = diag([1000^2, 1000^2]);
-distr.Unif = [-50; 50];
+distr.type = 'G'; % distribution type to use, 'G' (gaussian) or 'U' (uniform)
+distr.mu = [params.l0; params.l0];
+distr.Sigma = diag([2.0^2, 2.0^2]);
+distr.Unif = [params.l0 - 1.5, params.l0 + 1.5];
 
 % simulation params
 rt = 0.25;         % real time rate multiplier
 animate = 1;
+plot_pdf = 1;
 
 % intial conditions
 x0 = [0.25;    % px
@@ -40,13 +41,12 @@ x0 = [0.25;    % px
 
 % desired state
 x_des = [0.25; 
-         1.0; 
+         2.0; 
          0; 
          0];
 
 % monte carlo simulation
-[t, x, u] = simulate(x0, x_des, params, spc, distr);
-
+[t, x, u, distr_history] = simulate(x0, x_des, params, spc, distr);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -93,8 +93,8 @@ if animate == 1
 
     subplot(2, 3, 6);
     hold on;
-    plot(t(1:end-1), u(:, 1), 'b', 'LineWidth', 1);
-    plot(t(1:end-1), u(:, 2), 'r', 'LineWidth', 1);
+    stairs(t(1:end-1), u(:, 1), 'b', 'LineWidth', 1);
+    stairs(t(1:end-1), u(:, 2), 'r', 'LineWidth', 1);
     xline(0, '--');
     xlabel('t'); ylabel('u');
     legend('u1', 'u2');
@@ -154,6 +154,50 @@ if animate == 1
     end
 end
 
+% plot the distribution history
+if plot_pdf == 1
+    if distr.type == 'G' 
+        % for plotting the dsitribution
+        figure('Name', 'Distribution History');
+        hold on;
+
+        % make a meshgrid
+        mu_final = distr_history.Mu(end, :);
+        mu_max = max(mu_final) + 1;
+        mu_min = min(mu_final) - 1;
+        [X,Y] = meshgrid(mu_min:0.02:mu_max);
+        xlim([mu_min, mu_max]);
+        ylim([mu_min, mu_max]);
+
+        % plot the distribution history
+        for i = 1:spc.n_iters
+            
+            % get the current distribution parameters
+            mu = distr_history.Mu(i, :);
+            Sigma = distr_history.Sigma(:, :, i);
+
+            % plot the distribution
+            pdf = mvnpdf([X(:) Y(:)], mu, Sigma);
+            pdf = reshape(pdf, size(X));
+            pdf_plot = pcolor(X, Y, pdf); 
+
+            % plot the mean
+            mean_pt = plot(mu(1), mu(2), 'r.', 'MarkerSize', 10);
+            shading interp;
+
+            % tile
+            msg = sprintf('Iteration: %d\nmu = [%f, %f]\nSigma = [%f, %f; %f, %f]', i, mu(1), mu(2), Sigma(1, 1), Sigma(1, 2), Sigma(2, 1), Sigma(2, 2));
+            title(msg);
+
+            if i < spc.n_iters
+                pause(0.75);
+                delete(pdf_plot);
+                delete(mean_pt);
+            end
+        end
+    end
+end
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % double support dynamics
@@ -172,9 +216,15 @@ function xdot = dynamics(x, u, params)
     p_com = [x(1); x(2)];
     v_com = [x(3); x(4)];
 
-    % unpack control
-    u1 = u(1);
-    u2 = u(2);
+    % force inputs
+    % u1 = u(1);
+    % u2 = u(2);
+
+    % free length inputs
+    v1 = u(1);
+    v2 = u(2);
+    u1 = k * (v1 - l0);
+    u2 = k * (v2 - l0);
 
     % compute the leg vectors
     r1 = p_com - p1;
@@ -224,21 +274,35 @@ end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function [t, x_star, u_star] = simulate(x0, xdes, params, spc, distr)
+function [t, x_star, u_star, distr_history] = simulate(x0, xdes, params, spc, distr)
 
     % unpack the SPC parameters
     n_elite = spc.n_elite;
     n_iters = spc.n_iters;
 
+    % containers to store the distribution history
+    if distr.type == 'U'
+        Unif = zeros(n_iters, 2);
+    elseif distr.type == 'G'
+        Mu = zeros(n_iters, 2);
+        Sigma = zeros(2, 2, n_iters);
+    end
+
+    % converge on the optimal disitrubtion
     for i = 1:n_iters
 
         % display some info
         disp('-----------------------------------');
         fprintf('Iteration: %d \n', i);
-        fprintf('Mean: ');
-        distr.mu
-        fprintf('Sigma: ');
-        distr.Sigma
+        
+        if distr.type == 'U'
+            fprintf('Uniform Range: [%f, %f] \n', distr.Unif(1), distr.Unif(2));
+        elseif distr.type == 'G'
+            fprintf('Normal Mean: ');
+            distr.mu
+            fprintf('Normal Sigma: ');
+            distr.Sigma
+        end
 
         % monte carlo simulation of K trajectories
         [X, U, J] = monte_carlo(x0, xdes, params, spc, distr);
@@ -249,11 +313,28 @@ function [t, x_star, u_star] = simulate(x0, xdes, params, spc, distr)
 
         % pick the top elite input samples
         u_elite = U(:, :, 1:n_elite);
-        u_mean = mean(u_elite, 3);
-        
+        u_mean = mean(u_elite, 3);  % averaging the n elite samples
+                                    % getting an average input tape
+
         % update the parametric distribution
-        distr.mu = mean(u_mean)';
-        distr.Sigma = cov(u_mean);
+        if distr.type == 'U'
+
+            % save the uniform distribution
+            Unif(i, :) = distr.Unif;
+
+            % update the uniform distribution
+            distr.Unif = [min(u_mean(:)), max(u_mean(:))]; % need better way to update the UNiform parameters
+
+        elseif distr.type == 'G'
+            
+            % save the gaussian distribution
+            Mu(i, :) = distr.mu';
+            Sigma(:, :, i) = distr.Sigma;
+
+            % update the gaussian dsitribution
+            distr.mu = mean(u_mean)';
+            distr.Sigma = cov(u_mean);
+        end
     end
 
     % stuff to return
@@ -262,6 +343,14 @@ function [t, x_star, u_star] = simulate(x0, xdes, params, spc, distr)
     U = U(:, :, idx);
     x_star = X(:, :, 1);
     u_star = U(:, :, 1);
+
+    % store the distribution history
+    if distr.type == 'U'
+        distr_history = Unif;
+    elseif distr.type == 'G'
+        distr_history.Mu = Mu;
+        distr_history.Sigma = Sigma;
+    end
 end
 
 % monte carlo simualtion
@@ -286,7 +375,7 @@ function [X, U, J] = monte_carlo(x0, xdes, params, spc, distr)
         [t, x] = RK3_rollout(x0, u, params, spc);
 
         % compute the cost
-        c = eval_cost(xdes, x, u, spc);
+        c = eval_cost(xdes, x, u, params, spc);
 
         % store the data
         X(:, :, k) = x;
@@ -296,13 +385,14 @@ function [X, U, J] = monte_carlo(x0, xdes, params, spc, distr)
 end
 
 % comptue cost
-function J = eval_cost(xdes, x, u, spc)
+function J = eval_cost(xdes, x, u, params, spc)
 
     % unpack the parameters
     Q = spc.Q;
     R = spc.R;
     Qf = spc.Qf;
     N = spc.N;
+    l0_nom = [params.l0, params.l0];
 
     % compute the state cost
     % NOTE: cost can be anything
@@ -312,7 +402,7 @@ function J = eval_cost(xdes, x, u, spc)
         state_cost = (x(i, :)' - xdes)' * Q * (x(i, :)' - xdes);
         
         % control the control cost
-        control_cost = u(i, :) * R * u(i, :)';
+        control_cost = (u(i, :) - l0_nom) * R * (u(i, :) - l0_nom)';
 
         % accumulate the stage cost
         stage_cost = state_cost + control_cost + stage_cost;

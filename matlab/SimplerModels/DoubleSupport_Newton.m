@@ -13,9 +13,9 @@ params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position
 
 % intial conditions
-x0 = [0.25;   % px
-      1.5;   % pz
-      1;   % vx
+x0 = [0.25; % px
+      1.5;  % pz
+      1;    % vx
       10];  % vz
 
 % time span
