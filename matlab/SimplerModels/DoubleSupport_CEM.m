@@ -20,7 +20,7 @@ spc.Q = diag([10, 30, 0.1, 0.1]); % state cost
 spc.R = diag([0., 0.]);       % control cost
 spc.Qf = diag([30, 50, 1, 1]); % final state cost
 spc.n_elite = 2; % number of elite rollouts (Note: why does it suck with n =/= 1?)
-spc.n_iters = 25; % number of CE-M iterations
+spc.n_iters = 20; % number of CE-M iterations
 
 % initial distribution parameters
 distr.type = 'G'; % distribution type to use, 'G' (gaussian) or 'U' (uniform)
@@ -156,6 +156,9 @@ end
 
 % plot the distribution history
 if plot_pdf == 1
+
+    pause(1);
+
     if distr.type == 'G' 
         % for plotting the dsitribution
         figure('Name', 'Distribution History');

@@ -1,3 +1,7 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Sample the leg positions on a unit sphere
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 clear all; close all; clc; 
 
 % sample 
@@ -14,7 +18,7 @@ unifrnd(lb(2), ub(2), 1, N)]';
 
 % for normal sampling
 mu = [0; 0];            % mean
-sigma = diag([45^2, 45^2]); % covaraince
+sigma = diag([15^2, 15^2]); % covaraince
 angles = mvnrnd(mu, sigma, N);
 
 % convert to radians
