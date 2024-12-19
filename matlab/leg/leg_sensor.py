@@ -67,7 +67,6 @@ class LegSensor():
         else:
             return False
 
-
 class DynamicsIntegrator():
     """
     Simple class to simulate dynamics.

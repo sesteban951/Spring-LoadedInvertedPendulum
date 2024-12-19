@@ -13,14 +13,15 @@ params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position
 
 % SPC parameters
-spc.K = 500;  % number of rollouts
+spc.K = 1000;  % number of rollouts
 spc.dt = 0.01; % time step
 spc.N = 50;    % prediction horizon
-spc.Q = diag([10, 30, 0.1, 0.1]); % state cost
-spc.R = diag([0., 0.]);       % control cost
-spc.Qf = diag([30, 50, 1, 1]); % final state cost
-spc.n_elite = 2; % number of elite rollouts (Note: why does it suck with n =/= 1?)
-spc.n_iters = 20; % number of CE-M iterations
+spc.Q = diag([30, 30, 0.1, 0.1]); % state cost
+spc.R = diag([0., 0.]);           % control cost
+spc.Qf = diag([50, 50, 1, 1]);    % final state cost
+spc.n_elite = 10;      % number of elite rollouts (Note: why does it suck with n =/= 1?)
+spc.n_iters = 15;      % number of CE-M iterations
+spc.cov_scaling = 2.0; % scaling factor for the covariance to not collapse too fast
 
 % initial distribution parameters
 distr.type = 'G'; % distribution type to use, 'G' (gaussian) or 'U' (uniform)
@@ -41,7 +42,7 @@ x0 = [0.25;    % px
 
 % desired state
 x_des = [0.25; 
-         2.0; 
+         1.0; 
          0; 
          0];
 
@@ -336,7 +337,7 @@ function [t, x_star, u_star, distr_history] = simulate(x0, xdes, params, spc, di
 
             % update the gaussian dsitribution
             distr.mu = mean(u_mean)';
-            distr.Sigma = cov(u_mean);
+            distr.Sigma = spc.cov_scaling * cov(u_mean);
         end
     end
 
