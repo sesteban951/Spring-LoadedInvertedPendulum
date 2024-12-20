@@ -130,7 +130,7 @@ if animate == 1
         leg2 = plot([params.p2(1), px], [params.p2(2), pz], 'k', 'LineWidth', 2);
 
         % draw the ball mass
-        mass = plot(px, pz, 'ko', 'MarkerSize', 20, 'MarkerFaceColor', [0.8500 0.3250 0.0980]	);
+        mass = plot(px, pz, 'ko', 'MarkerSize', 20, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
 
         drawnow;
 
