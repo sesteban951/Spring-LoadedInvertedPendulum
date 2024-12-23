@@ -78,19 +78,52 @@ class DynamicsIntegrator():
         self.tf = tf
         self.dt = dt
 
+        # system parameters
+        self.m = 1.0
+        self.k = 4000
+        self.b = 40
+        self.l0 = 1.0
+        self.g = 9.81
+
     # RK2 method given the t, x0,and f(x)
-    def RK2_step(self, t, xk, uk, f):
+    def RK2_step(self, t, xk, uk, p_foot, f):
 
         # take an integration step using RK2 scheme
-        f1 = f(t, xk, uk)
-        f2 = f(t, xk + 0.5 * self.dt * f1, uk)
+        f1 = f(t, 
+               xk, 
+               uk,
+               p_foot)
+        f2 = f(t, 
+               xk + 0.5 * self.dt * f1, 
+               uk,
+               p_foot)
         xk_next = xk + self.dt * f2
+
+        return xk_next
+    
+    # RK3 method given that t, x0, and f(x)
+    def RK3_step(self, t, xk, uk, p_foot, f):
+
+        # take an integration step using RK3 scheme
+        f1 = f(t, 
+               xk, 
+               uk,
+               p_foot)
+        f2 = f(t,
+               xk + 0.5 * self.dt * f1,
+               uk,
+               p_foot)
+        f3 = f(t,
+               xk - self.dt * f1 + 2 * self.dt * f2,
+               uk,
+               p_foot)
+        xk_next = xk + (self.dt/6) * (f1 + 4*f2 + f3)
 
         return xk_next
 
     # flight dynamics
-    def flight_dynamics(self, t, x, u):
-        # unpack the state
+    def flight_dynamics(self, t, x, u, p_foot):
+        # unpack COM the state
         vx = x[2]
         vz = x[3]
 
@@ -98,7 +131,32 @@ class DynamicsIntegrator():
         xdot = np.array([vx, 
                          vz, 
                          0, 
-                         -9.81])
+                         -self.g])
+        return xdot
+    
+    # single leg dynamics
+    def ground_dynamics(self, t, x, u, p_foot):
+        # unpack the COM state
+        p = np.array([[x[0]], 
+                      [x[1]]])
+        v = np.array([[x[2]],
+                      [x[3]]])
+
+        # compute the leg state
+        r = p - p_foot
+        r_unit = r / np.linalg.norm(r)
+        r_mag = np.linalg.norm(r)
+        r_mag_dot = np.dot(v, r) / r_mag
+        
+        # compute the ground reactoin force
+        lambd = (self.k /self.m) * (self.l0 - r_mag) - (self.b / self.m) * r_mag_dot + (1/self.m) * u
+
+        # compute the groudn dynamics
+        a = r_unit * lambd - np.array([[0], [self.g]])
+
+        # return f(x,u)
+        xdot = np.vstack((v, a))
+
         return xdot
 
     # compute the parabolic trajectory
@@ -126,6 +184,8 @@ class DynamicsIntegrator():
 
         return x
 
+#########################################################################
+
 # just testing some stuff out
 if __name__ == "__main__":
 
@@ -133,12 +193,13 @@ if __name__ == "__main__":
     t0 = 0.0
     tf = 1.0
     dt = 0.01
-    d = DynamicsIntegrator(t0, tf, dt)
+    di = DynamicsIntegrator(t0, tf, dt)
 
     # create the leg sensor
     l = LegSensor()
 
     # initial conditions
+    D0 = 0 # flight = 0, ground = 1
     x0_com = np.array([0,   # px
                        3,   # pz
                        0.5, # vx
@@ -152,9 +213,6 @@ if __name__ == "__main__":
     l.update_state(x0_com, x0_leg)
     l.update_domain(0) # in flight
     x0_foot = l.x_foot
-
-    # analytical flight
-    # x_t = d.parabolic_traj(x0_com)
 
     # numerical flight
     t_span = np.arange(t0, tf, dt)
@@ -178,11 +236,11 @@ if __name__ == "__main__":
             break
         
         # update the states
-        xk_com = d.RK2_step(0, xk_com, 0.0, d.flight_dynamics)
+        p_foot = np.array([[0], [0]])
+        xk_com = di.RK2_step(0, xk_com, 0.0, p_foot, di.flight_dynamics)
         xk_leg = x0_leg
         l.update_state(xk_com, xk_leg)
         xk_foot = l.x_foot
-
 
         X_com[i+1, :] = xk_com
         X_leg[i+1, :] = xk_leg
