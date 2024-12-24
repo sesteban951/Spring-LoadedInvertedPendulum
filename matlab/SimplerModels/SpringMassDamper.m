@@ -4,11 +4,11 @@
 clc; clear all; close all;
 
 % system parameters
-sys.m = 1;     % mass
-sys.k = 50;    % spring constant
-sys.b = 5;     % damping constant
+sys.m = 35;     % mass
+sys.k = 4000;    % spring constant
+sys.b = 400;     % damping constant
 sys.g = 9.81;  % gravity
-sys.l0 = 0.4;  % nominal length
+sys.l0 = 0.68;  % nominal length
 
 % mpc parameters
 mpc.K = 100;     % number of rollouts
@@ -21,11 +21,11 @@ mpc.sigma = 0.1; % standard deviation
 tspan = 0:mpc.dt:mpc.dt*(mpc.N-1);
 
 % initial conditions
-x0 = [0.5; % inital position 
+x0 = [0.7; % inital position 
       0.0]; % initial velocity
 
 % simulate the system 
-u_t = [tspan', 0*ones(mpc.N, 1)];
+u_t = [tspan', 0.68 * ones(mpc.N, 1)];
 [t, x] = ode45(@(t, x) dynamics(t, x, u_t, sys), tspan, x0);
 
 % plot the results
@@ -122,7 +122,8 @@ function xdot = dynamics(t, x, u_t, sys)
          (k/m)*sys.l0-g];
 
     % get the control action
-    u = get_control(t, x, u_t, sys);
+    v = get_control(t, x, u_t, sys);
+    u = k * (v - sys.l0);
 
     % define the dynamics
     xdot = A*x + B*u + C;

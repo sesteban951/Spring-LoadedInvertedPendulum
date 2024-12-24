@@ -19,7 +19,7 @@ spc.N = 50;    % prediction horizon
 spc.Q = diag([30, 30, 0.1, 0.1]); % state cost
 spc.R = diag([0., 0.]);           % control cost
 spc.Qf = diag([50, 50, 1, 1]);    % final state cost
-spc.n_elite = 10;      % number of elite rollouts (Note: why does it suck with n =/= 1?)
+spc.n_elite = 10;      % number of elite rollouts to consider
 spc.n_iters = 15;      % number of CE-M iterations
 spc.cov_scaling = 2.0; % scaling factor for the covariance to not collapse too fast
 
