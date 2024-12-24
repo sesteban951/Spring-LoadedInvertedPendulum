@@ -8,12 +8,12 @@ params.m = 35.0;   % mass (mass of Unitree G1)
 params.g = 9.81;   % gravity
 params.l0 = 0.65;   % Unitree G1 when standing is at 
                      % p_com_z at 0.707m (pelvis frame at 0.79m)
-params.k = 4000;  % spring constant
-params.b = 400.0;    % damping coefficient
+params.k = 5000;  % spring constant
+params.b = 500.0;    % damping coefficient
 
 % SPC parameters
 spc.K = 1000;  % number of rollouts
-spc.dt = 0.05; % time step
+spc.dt = 0.01; % time step
 spc.N = 50;    % prediction horizon
 spc.interp = 'L'; % interpolation method 'L' (linear) or 'Z' (zero order hold)
 
@@ -34,20 +34,20 @@ distr.Unif = [params.l0 - 1.0, params.l0 + 1.0;  % left leg length
 
 % initial state and domain
 d = 'F';    % initial domain
-x0 = [0;   % px
-      0.7; % pz
-      0;   % vx
-      0];  % vz
+x0 = [0.5;  % px
+      0.79; % pz
+      0;    % vx
+      0];   % vz
+pL = [0; 0]; % left foot position
+pR = [1; 0]; % right foot position
 
-U = sample_input(spc, distr);
-T = 0:0.0001:3.0;
-
-u_traj = zeros(4, length(T));
-for i = 1:length(T)
-    u_traj(:,i) = interpolate_input(T(i), U, spc);
-end
-
-plot(T, u_traj(1,:), 'r', 'LineWidth', 2);
+tspan = 0:spc.dt:50.0;
+[t, x] = ode45(@(t, x) dynamics(t, x, [0.65; 0.65], d, [pL; pR], params), tspan, x0);
+plot(x(:,1), x(:,2), 'b.', 'LineWidth', 2);
+hold on; axis equal;
+plot(pL(1), pL(2), 'ro', 'LineWidth', 2);
+plot(pR(1), pR(2), 'ro', 'LineWidth', 2);
+xline(0); yline(0);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -75,7 +75,7 @@ function xdot = dynamics(t, x, u, d, p_feet, params)
         
         % compute the leg state
         pL = [p_feet(1); p_feet(2)];
-        rL = pL - p_com;
+        rL = p_com - pL;
         rL_norm = norm(rL);
         rL_hat = rL / rL_norm;
 
@@ -93,7 +93,7 @@ function xdot = dynamics(t, x, u, d, p_feet, params)
 
         % compute the leg state
         pR = [p_feet(3); p_feet(4)];
-        rR = pR - p_com;
+        rR = p_com - pR;
         rR_norm = norm(rR);
         rR_hat = rR / rR_norm;
 
@@ -112,8 +112,8 @@ function xdot = dynamics(t, x, u, d, p_feet, params)
         % compute the leg state
         pL = [p_feet(1); p_feet(2)];
         pR = [p_feet(3); p_feet(4)];
-        rL = pL - p_com;
-        rR = pR - p_com;
+        rL = p_com - pL;
+        rR = p_com - pR;
         rL_norm = norm(rL);
         rR_norm = norm(rR);
         rL_hat = rL / rL_norm;
@@ -133,6 +133,8 @@ function xdot = dynamics(t, x, u, d, p_feet, params)
     end
 
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % sample an input trajectory
 function U = sample_input(spc, distr)
@@ -187,3 +189,5 @@ function u = interpolate_input(t, U, spc)
         end
     end
 end
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
