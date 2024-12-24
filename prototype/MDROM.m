@@ -6,15 +6,16 @@ clear all; close all; clc;
 % system parameters
 params.m = 35.0;   % mass (mass of Unitree G1)
 params.g = 9.81;   % gravity
-params.l0 = 0.68;   % Unitree G1 when standing is at 
+params.l0 = 0.65;   % Unitree G1 when standing is at 
                      % p_com_z at 0.707m (pelvis frame at 0.79m)
 params.k = 4000;  % spring constant
 params.b = 400.0;    % damping coefficient
 
 % SPC parameters
 spc.K = 1000;  % number of rollouts
-spc.dt = 0.01; % time step
+spc.dt = 0.05; % time step
 spc.N = 50;    % prediction horizon
+spc.interp = 'L'; % interpolation method 'L' (linear) or 'Z' (zero order hold)
 
 % initial distribution parameters
 distr.type = 'U'; % distribution type to use, 'G' (gaussian) or 'U' (uniform)
@@ -37,6 +38,16 @@ x0 = [0;   % px
       0.7; % pz
       0;   % vx
       0];  % vz
+
+U = sample_input(spc, distr);
+T = 0:0.0001:3.0;
+
+u_traj = zeros(4, length(T));
+for i = 1:length(T)
+    u_traj(:,i) = interpolate_input(T(i), U, spc);
+end
+
+plot(T, u_traj(1,:), 'r', 'LineWidth', 2);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -144,5 +155,35 @@ function U = sample_input(spc, distr)
         Sigma = distr.Sigma;
         U = mvnrnd(mu, Sigma, spc.N-1)';
 
+    end
+end
+
+% interpolate the input trajectory
+function u = interpolate_input(t, U, spc)
+
+    % build the time array for the trajectory
+    T_u = 0:spc.dt:spc.dt*(spc.N-2);
+
+    % find where the time is in the trajectory
+    idx = find(T_u <= t, 1, 'last');
+
+    % zero order hold
+    if spc.interp =='Z'
+        % just constant input
+        u = U(:,idx);
+
+    % linear interpolation
+    elseif spc.interp == 'L'
+        % beyond the last point
+        if idx == size(U,2)
+            u = U(:,end);
+        % linear interpolation
+        else
+            t1 = T_u(idx);
+            t2 = T_u(idx+1);
+            u1 = U(:,idx);
+            u2 = U(:,idx+1);
+            u = u1 + (u2 - u1) * (t - t1) / (t2 - t1);
+        end
     end
 end
