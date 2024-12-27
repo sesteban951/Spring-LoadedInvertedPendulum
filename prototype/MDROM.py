@@ -48,20 +48,9 @@ class MDROM:
         self.k = system_params.k
         self.b = system_params.b
         self.dt = control_params.dt
-
-        # states in world frame
-        self.x_com = np.zeros((4, 1))    # center of mass state
-        self.x_left = np.zeros((4, 1))   # left leg state
-        self.x_right = np.zeros((4, 1))  # right leg state
-
-        # initiliaze the domain
-        self.domain = None # 'F': flight, 'L': left leg stance, 'R': right leg stance, 'D': double stance
-        self.contact = [None, None]  # '[0,0]': flight, 
-                                     # '[1,0]': left leg stance, 
-                                     # '[0,1]': right leg stance, 
-                                     # '[1,1]': double stance
+        self.N = control_params.N
         
-    def dynamics(self, u):
+    def dynamics(self, x_com, x_left, x_right, u, d):
         """
         Compute the dynamics of the system
         """
@@ -73,22 +62,32 @@ class MDROM:
         b = self.b
 
         # unpack the state
-        p_com = np.array([[self.x_com[0]],  # position of the center of mass
-                          [self.x_com[1]]])
-        v_com = np.array([[self.x_com[2]],  # velocity of the center of mass
-                          [self.x_com[3]]])
+        p_com = np.array([[x_com[0]],  # position of the center of mass
+                          [x_com[1]]]).reshape(2, 1)
+        v_com = np.array([[x_com[2]],  # velocity of the center of mass
+                          [x_com[3]]]).reshape(2, 1)
+        
+        # unpack the leg states
+        p_left = np.array([[x_left[0]],  # position of the left leg
+                           [x_left[1]]]).reshape(2, 1)
+        v_left = np.array([[x_left[2]],  # velocity of the left leg
+                           [x_left[3]]]).reshape(2, 1)
+        p_right = np.array([[x_right[0]],  # position of the right leg
+                            [x_right[1]]]).reshape(2, 1)
+        v_right = np.array([[x_right[2]],  # velocity of the right leg
+                            [x_right[3]]]).reshape(2, 1)
         
         # Flight domain (F)
-        if self.D == 'F':
+        if d == 'F':
             # compute the dynamics
             a_com = np.array([[0],  
                               [-g]])
             xdot = np.vstack((v_com, a_com))
 
         # Left leg stance domain (L)
-        elif self.D == 'L':
+        elif d == 'L':
             # compute the leg state
-            rL = p_com - self.x_left[0:2]
+            rL = p_com - p_left
             rL_norm = np.linalg.norm(rL)
             rL_hat = rL / rL_norm
 
@@ -101,9 +100,9 @@ class MDROM:
             xdot = np.vstack((v_com, a_com))
 
         # Right leg stance domain (R)
-        elif self.D == 'R':
+        elif d == 'R':
             # compute the leg state
-            rR = p_com - self.x_right[0:2]
+            rR = p_com - p_right
             rR_norm = np.linalg.norm(rR)
             rR_hat = rR / rR_norm
 
@@ -116,10 +115,10 @@ class MDROM:
             xdot = np.vstack((v_com, a_com))
 
         # Double stance domain (D)
-        elif self.D == 'D':
+        elif d == 'D':
             # compute the leg state
-            rL = p_com - self.x_left[0:2]
-            rR = p_com - self.x_right[0:2]
+            rL = p_com - p_left
+            rR = p_com - p_right
             rL_norm = np.linalg.norm(rL)
             rR_norm = np.linalg.norm(rR)
             rL_hat = rL / rL_norm
@@ -138,6 +137,82 @@ class MDROM:
             xdot = np.vstack((v_com, a_com))
         
         return xdot
+    
+    # def RK3 integration scheme
+    def RK3_rollout(self, x0_com, x0_left, x0_right, U, D0):
+        """
+        Runge-Kutta 3rd order integration scheme
+        """
+        # integration parameters
+        dt = self.dt
+        N = self.N
+
+        # make the containers
+        Tx = np.arange(0, N) * dt
+        Tu = np.arange(0, N-1) * dt
+        xt_com = np.zeros((4, N))
+
+        xt_com[:, 0] = x0_com.reshape(4) 
+
+        # RK3 integration
+        xk_com = x0_com
+        xk_left = x0_left
+        xk_right = x0_right
+        dk = D0
+        t = 0
+        for i in range(0, N-1):
+            # intermmidiate times
+            t1 = t
+            t2 = t + dt/2
+            t3 = t + dt
+
+            # get the intermmediate inputs
+            u1 = self.get_control_input(t1, Tu, U)
+            u2 = self.get_control_input(t2, Tu, U)
+            u3 = self.get_control_input(t3, Tu, U)
+
+            # RK3 vector fields
+            f1 = self.dynamics(xk_com, 
+                               xk_left, 
+                               xk_right, 
+                               u1, 
+                               dk)
+            f2 = self.dynamics(xk_com + dt/2 * f1, 
+                               xk_left, 
+                               xk_right, 
+                               u2, 
+                               dk)
+            f3 = self.dynamics(xk_com - dt*f1 + 2*dt*f2, 
+                               xk_left, 
+                               xk_right, 
+                               u3, 
+                               dk)
+
+            # take the step
+            xk_com = xk_com + (dt/6) * (f1 + 4*f2 + f3)
+            xt_com[:, i+1] = xk_com.reshape(4)
+
+        return Tx, xt_com
+    
+    def get_control_input(self, t, Tu, U):
+        """
+        Get the control input
+        """
+        # find which interval the time belongs to
+        idx = np.where(Tu <= t)[0][-1]
+
+        u = np.zeros((2, 1))
+
+        return u
+    
+#######################################################################
+# DISTRIBUTION
+#######################################################################
+
+class ParametricDistribution:
+    def __init__(self, mu, sigma):
+        self.mu = mu
+        self.sigma = sigma
 
 #######################################################################
 # MAIN
@@ -160,4 +235,29 @@ if __name__ == "__main__":
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
 
+    # initial conditions
+    x0_com = np.array([[0.0], 
+                       [1.0], 
+                       [1.0], 
+                       [0.0]])
+    x0_left = np.array([[0.0], 
+                        [0.0], 
+                        [0.0], 
+                        [0.0]])
+    x0_right = np.array([[0.0], 
+                        [0.0], 
+                        [0.0], 
+                        [0.0]])
+    D0 = 'F'
+    U = np.zeros((2, control_params.N-1))
 
+    # run the simulation
+    t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, U, D0)
+    
+    # plt.figure()
+    # plt.plot(x[0, :], x[1, :], label='x')
+    # plt.xlabel('x [m]')
+    # plt.ylabel('y [m]')
+    # plt.grid()
+    # plt.legend()
+    # plt.show()
