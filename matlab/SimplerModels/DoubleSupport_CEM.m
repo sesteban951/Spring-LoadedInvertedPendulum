@@ -4,11 +4,11 @@
 clear all; close all; clc;
 
 % system parameters
-params.m = 25.0;   % mass 
+params.m = 35.0;   % mass 
 params.g = 9.81;   % gravity
-params.l0 = 1.5;   % free length of the leg
-params.k = 4000;  % spring constant
-params.b = 400.0;    % damping coefficient
+params.l0 = 0.65;   % free length of the leg
+params.k = 5000;  % spring constant
+params.b = 500.0;    % damping coefficient
 params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position
 
@@ -36,13 +36,13 @@ plot_pdf = 1;
 
 % intial conditions
 x0 = [0.25;    % px
-      1.45378; % pz
+      0.7; % pz
       0;   % vx
       0];  % vz
 
 % desired state
 x_des = [0.25; 
-         1.0; 
+         0.3; 
          0; 
          0];
 

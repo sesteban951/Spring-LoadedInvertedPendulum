@@ -32,23 +32,31 @@ distr.Unif = [params.l0 - 1.0, params.l0 + 1.0;  % left leg length
               -pi/2, pi/2;                       % left angle
               -pi/2, pi/2];                      % right angle
 
-% initial state and domain
+% initial domain
 d = 'F';    % initial domain
-x0 = [0.5;  % px
-      0.79; % pz
+
+% initial state and domain
+x0 = [0.25;  % px
+      0.7; % pz
       0;    % vx
       0];   % vz
-pL = [0; 0]; % left foot position
-pR = [1; 0]; % right foot position
+% in flight leg state (in com frame)
+x_leg = [0.5; % L leg length [m]
+         0.5; % R leg length [m]
+         -0.1;   % L angle [rad]
+         0.1];  % R angle [rad]
+p_feet = [nan; nan; nan; nan]; % feet position
+tspan = 0:0.01:10;
+u = [0; 
+     0; 
+     0; 
+     0];
 
-tspan = 0:spc.dt:50.0;
-[t, x] = ode45(@(t, x) dynamics(t, x, [0.65; 0.65], d, [pL; pR], params), tspan, x0);
-plot(x(:,1), x(:,2), 'b.', 'LineWidth', 2);
-hold on; axis equal;
-plot(pL(1), pL(2), 'ro', 'LineWidth', 2);
-plot(pR(1), pR(2), 'ro', 'LineWidth', 2);
-xline(0); yline(0);
+options_TD = odeset('Events', @(t, x) S_TD(t, x, x_leg, params));
+[t, x] = ode45(@(t, x) dynamics(t, x, u, d, p_feet, params), tspan, x0, options_TD);
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% DYNAMICS
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % main dynamics function
@@ -130,10 +138,15 @@ function xdot = dynamics(t, x, u, d, p_feet, params)
               + rR_hat * ((k/m) * (l0 - rR_norm) - (b/m) * (v_com' * rR) / rR_norm + (1/m) * uR) ...
               + [0; -g];
         xdot = [v_com; a_com];  
+    else
+        msg = sprintf('\n\tInvalid domain, given: "%s" \n', d);
+        error(msg);
     end
 
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% CONTROL SAMPLING
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % sample an input trajectory
@@ -191,3 +204,29 @@ function u = interpolate_input(t, U, spc)
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% SWITCHING SURFACE
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% guard: touch down (TD) function for legs
+function [value, isterminal, direction] = S_TD(t, x_com, x_leg, params)
+
+    % unpack the parameters
+    l0 = params.l0;
+
+    % extract the com state
+    pz_com = x(2);
+    vz_com = x(4);
+
+    % exctract the leg state
+    thetaL = theta(1);
+    thetaR = theta(2);
+
+    % compute the foot state
+    pz_L = pz_com  - l0 * cos(thetaL);
+    pz_R = pz_com  - l0 * cos(thetaR);
+
+    % guard conditions
+    value = pz_L;   % foot height (event at pz_L = 0)
+    isterminal = 1; % stop integration when event is triggered
+    direction = -1; % negative direction
+end
