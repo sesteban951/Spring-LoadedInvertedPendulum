@@ -29,6 +29,7 @@ class PredictiveControlParams:
     N: int      # prediction horizon
     dt: float   # time step [s]
     K: int      # number of rollouts
+    interp: str # interpolation method, 'Z' for zero order hold, 'L' for linear
 
 #######################################################################
 # DYNMICS
@@ -47,12 +48,16 @@ class MDROM:
         self.l0 = system_params.l0
         self.k = system_params.k
         self.b = system_params.b
+
+        # initialize control parameters
         self.dt = control_params.dt
         self.N = control_params.N
+        self.interp = control_params.interp
         
     def dynamics(self, x_com, x_left, x_right, u, d):
         """
-        Compute the dynamics of the system
+        Compute hte dynamics, xdot = f(x, u)
+            x_com: state of the center of mass in world frame
         """
         # access the system parameters
         m = self.m
@@ -136,7 +141,39 @@ class MDROM:
             a_com = a_left + a_right + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
         
-        return xdot
+        return xdot    
+
+    # interpolate the control input
+    def get_control_input(self, t, Tu, U):
+        """
+        Interpolate the control input signal. 
+        """
+        # find which interval the time belongs to
+        idx = np.where(Tu <= t)[0][-1]
+
+        # zero order hold interpolation
+        if self.interp == 'Z':
+            # constant control input
+            u = U[:, idx]
+        
+        # linear interpolation
+        elif self.interp == 'L':
+            # beyond the last knot
+            if idx == len(Tu) - 1:
+                u = U[:, idx]
+
+            # within an interval
+            else:
+                # knot ends
+                t0 = Tu[idx]
+                tf = Tu[idx+1]
+                u0 = U[:, idx]
+                uf = U[:, idx+1]
+
+                # linear interpolation
+                u = u0 + (uf - u0) * (t - t0) / (tf - t0)
+ 
+        return u
     
     # def RK3 integration scheme
     def RK3_rollout(self, x0_com, x0_left, x0_right, U, D0):
@@ -151,7 +188,6 @@ class MDROM:
         Tx = np.arange(0, N) * dt
         Tu = np.arange(0, N-1) * dt
         xt_com = np.zeros((4, N))
-
         xt_com[:, 0] = x0_com.reshape(4) 
 
         # RK3 integration
@@ -159,12 +195,12 @@ class MDROM:
         xk_left = x0_left
         xk_right = x0_right
         dk = D0
-        t = 0
         for i in range(0, N-1):
             # intermmidiate times
-            t1 = t
-            t2 = t + dt/2
-            t3 = t + dt
+            tk = i * dt
+            t1 = tk
+            t2 = tk + dt/2
+            t3 = tk + dt
 
             # get the intermmediate inputs
             u1 = self.get_control_input(t1, Tu, U)
@@ -193,26 +229,15 @@ class MDROM:
             xt_com[:, i+1] = xk_com.reshape(4)
 
         return Tx, xt_com
-    
-    def get_control_input(self, t, Tu, U):
-        """
-        Get the control input
-        """
-        # find which interval the time belongs to
-        idx = np.where(Tu <= t)[0][-1]
 
-        u = np.zeros((2, 1))
+    # Touch-Down (TD) switching surafce
+    def S_TD(self, x_com, x_left, x_right):
 
-        return u
-    
-#######################################################################
-# DISTRIBUTION
-#######################################################################
+        
+        pz_com = x_com[1]
 
-class ParametricDistribution:
-    def __init__(self, mu, sigma):
-        self.mu = mu
-        self.sigma = sigma
+
+
 
 #######################################################################
 # MAIN
@@ -221,43 +246,50 @@ class ParametricDistribution:
 if __name__ == "__main__":
 
     # decalre the system parameters
-    system_params = SystemParams(m=1.0, 
+    system_params = SystemParams(m=35.0, 
                                  g=9.81, 
-                                 l0=1.0, 
-                                 k=100.0, 
-                                 b=10.0)
+                                 l0=0.65, 
+                                 k=5000.0, 
+                                 b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=10, 
+    control_params = PredictiveControlParams(N=5000, 
                                              dt=0.01, 
-                                             K=100)
+                                             K=100,
+                                             interp='L')
     
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
 
     # initial conditions
     x0_com = np.array([[0.0], 
-                       [1.0], 
-                       [1.0], 
+                       [0.65], 
+                       [0.1], 
                        [0.0]])
     x0_left = np.array([[0.0], 
                         [0.0], 
                         [0.0], 
                         [0.0]])
-    x0_right = np.array([[0.0], 
+    x0_right = np.array([[1.0], 
                         [0.0], 
                         [0.0], 
                         [0.0]])
-    D0 = 'F'
-    U = np.zeros((2, control_params.N-1))
+    D0 = 'R'
+
+    # control inputs
+    # U1 = np.arange(0, control_params.N-1) * 0.0
+    # U2 = np.arange(0, control_params.N-1) * 0.0
+    # U = np.vstack((U1, U2))
+    U = np.ones((2, control_params.N-1)) * 0.65
 
     # run the simulation
     t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, U, D0)
     
-    # plt.figure()
-    # plt.plot(x[0, :], x[1, :], label='x')
-    # plt.xlabel('x [m]')
-    # plt.ylabel('y [m]')
-    # plt.grid()
-    # plt.legend()
-    # plt.show()
+    plt.figure()
+    plt.plot(x[0, :], x[1, :], label='x')
+    plt.xlabel('x [m]')
+    plt.ylabel('y [m]')
+    plt.grid()
+    plt.axis('equal') 
+    plt.legend()
+    plt.show()
