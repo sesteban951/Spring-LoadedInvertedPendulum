@@ -92,7 +92,7 @@ class MDROM:
         # Left leg stance domain (L)
         elif d == 'L':
             # compute the leg state
-            rL = p_com - p_left
+            rL = p_left - p_com
             rL_norm = np.linalg.norm(rL)
             rL_hat = rL / rL_norm
 
@@ -101,13 +101,14 @@ class MDROM:
             uL = k * (vL - l0)
 
             # compute the dynamics
-            a_com = rL_hat * ((k/m) * (l0 - rL_norm) - (b/m) * (v_com.T @ rL) / rL_norm + (1/m) * uL) + np.array([[0], [-g]])
+            a_left = -(rL_hat/m) * (k * (l0 - rL_norm) + b * (v_com.T @ rL_hat) + uL)
+            a_com = a_left + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
 
         # Right leg stance domain (R)
         elif d == 'R':
             # compute the leg state
-            rR = p_com - p_right
+            rR = p_right - p_com
             rR_norm = np.linalg.norm(rR)
             rR_hat = rR / rR_norm
 
@@ -116,14 +117,15 @@ class MDROM:
             uR = k * (vR - l0)
 
             # compute the dynamics
-            a_com = rR_hat * ((k/m) * (l0 - rR_norm) - (b/m) * (v_com.T @ rR) / rR_norm + (1/m) * uR) + np.array([[0], [-g]])
+            a_right = -(rR_hat/m) * (k * (l0 - rR_norm) + b * (v_com.T @ rR_hat) + uR)
+            a_com = a_right + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
 
         # Double stance domain (D)
         elif d == 'D':
             # compute the leg state
-            rL = p_com - p_left
-            rR = p_com - p_right
+            rL = p_left - p_com
+            rR = p_right - p_com
             rL_norm = np.linalg.norm(rL)
             rR_norm = np.linalg.norm(rR)
             rL_hat = rL / rL_norm
@@ -136,8 +138,8 @@ class MDROM:
             uR = k * (vR - l0)
 
             # compute the dynamics
-            a_left = rL_hat * ((k/m) * (l0 - rL_norm) - (b/m) * (v_com.T @ rL) / rL_norm + (1/m) * uL)
-            a_right = rR_hat * ((k/m) * (l0 - rR_norm) - (b/m) * (v_com.T @ rR) / rR_norm + (1/m) * uR)
+            a_left =  -(rL_hat/m) * (k * (l0 - rL_norm) + b * (v_com.T @ rL_hat) + uL)
+            a_right = -(rR_hat/m) * (k * (l0 - rR_norm) + b * (v_com.T @ rR_hat) + uR)
             a_com = a_left + a_right + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
         
@@ -173,6 +175,8 @@ class MDROM:
                 # linear interpolation
                 u = u0 + (uf - u0) * (t - t0) / (tf - t0)
  
+        print(u)
+
         return u
     
     # def RK3 integration scheme
@@ -231,12 +235,10 @@ class MDROM:
         return Tx, xt_com
 
     # Touch-Down (TD) switching surafce
-    def S_TD(self, x_com, x_left, x_right):
+    # def S_TD(self, x_com, x_left, x_right):
 
         
-        pz_com = x_com[1]
-
-
+    #     pz_com = x_com[1]
 
 
 #######################################################################
@@ -253,40 +255,40 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=5000, 
+    control_params = PredictiveControlParams(N=500, 
                                              dt=0.01, 
                                              K=100,
-                                             interp='L')
+                                             interp='Z')
     
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
 
     # initial conditions
-    x0_com = np.array([[0.0], 
-                       [0.65], 
-                       [0.1], 
-                       [0.0]])
+    x0_com = np.array([[0.25], 
+                       [0.75], 
+                       [1.0], 
+                       [5.0]])
     x0_left = np.array([[0.0], 
                         [0.0], 
                         [0.0], 
                         [0.0]])
-    x0_right = np.array([[1.0], 
+    x0_right = np.array([[0.5], 
                         [0.0], 
                         [0.0], 
                         [0.0]])
     D0 = 'R'
 
     # control inputs
-    # U1 = np.arange(0, control_params.N-1) * 0.0
-    # U2 = np.arange(0, control_params.N-1) * 0.0
-    # U = np.vstack((U1, U2))
     U = np.ones((2, control_params.N-1)) * 0.65
 
     # run the simulation
     t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, U, D0)
     
     plt.figure()
+    plt.plot(0, 0, 'ko', label='ground')    
     plt.plot(x[0, :], x[1, :], label='x')
+    plt.plot(x0_com[0], x0_com[1], 'go', label='x0')
+    plt.plot(x[0, -1], x[1, -1], 'rx', label='xf')
     plt.xlabel('x [m]')
     plt.ylabel('y [m]')
     plt.grid()
