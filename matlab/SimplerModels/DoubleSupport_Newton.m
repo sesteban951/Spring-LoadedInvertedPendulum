@@ -4,25 +4,25 @@
 clear all; close all; clc;
 
 % system parameters
-params.m = 25.0;   % mass 
+params.m = 35.0;   % mass 
 params.g = 9.81;   % gravity
-params.l0 = 1.5;   % free length of the leg
+params.l0 = 0.65;   % free length of the leg
 params.k = 5000;  % spring constant
-params.b = 10.0;    % damping coefficient
+params.b = 50.0;    % damping coefficient
 params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position
 
 % intial conditions
 x0 = [0.25; % px
-      1.5;  % pz
+      0.75;  % pz
       1;    % vx
-      10];  % vz
+      5];  % vz
 
 % time span
 rt = 1.0;         % real time rate multiplier
 f = 25;            % frequency, [Hz]
 dt = 1/(f);        % time step, [s]
-tmax = 3.0;        % max time,  [s]
+tmax = 5.0;        % max time,  [s]
 tspan = 0:dt:tmax; % time span, [s]
 
 % Dummy solve to warm up the ode45 solver
@@ -194,21 +194,23 @@ function xdot = dynamics(t, x, params)
     v_com = [x(3); x(4)];
 
     % compute the leg vectors
-    r1 = p_com - p1;
-    r2 = p_com - p2;
+    r1 = p1 - p_com;
+    r2 = p2 - p_com;
     r1_norm = norm(r1);
     r2_norm = norm(r2);
     r1_hat = r1/r1_norm;
     r2_hat = r2/r2_norm;
     
     % compute control effort
-    u1 = 10;
-    u2 = 10;
+    v1 = 1.2;
+    v2 = 1.2;
+    u1 = k * (v1 - l0);
+    u2 = k * (v2 - l0);
 
     % compute the dynamics
-    a_com = r1_hat * ((k/m) * (l0 - r1_norm) - (b/m) * (v_com' * r1) / r1_norm + (1/m) * u1) ...
-          + r2_hat * ((k/m) * (l0 - r2_norm) - (b/m) * (v_com' * r2) / r2_norm + (1/m) * u2) ...
-          + [0; -g];
+    a_com = -(r1_hat / m) * (k * (l0 - r1_norm) + b * (v_com' * r1_hat) + u1) ...
+            -(r2_hat / m) * (k * (l0 - r2_norm) + b * (v_com' * r2_hat) + u2) ...
+            + [0; -g];
     xdot = [v_com; a_com];
 
 end
