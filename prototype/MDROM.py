@@ -32,6 +32,16 @@ class PredictiveControlParams:
     K: int      # number of rollouts
     interp: str # interpolation method, 'Z' for zero order hold, 'L' for linear
 
+@dataclass
+class UniformDistribution:
+    """
+    Uniform distribution parameters
+    """
+    r_mean: float      # prismatic leg center [m]
+    r_delta: float     # prismatic leg delta range [m]
+    theta_mean: float  # revolute leg center [rad]
+    theta_delta: float # revolute leg delta range [rad]
+
 #######################################################################
 # DYNMICS
 #######################################################################
@@ -55,10 +65,9 @@ class MDROM:
         self.N = control_params.N
         self.interp = control_params.interp
         
-    def dynamics(self, x_com, x_left, x_right, u, d):
+    def dynamics(self, x_com, p_left, p_right, u, d):
         """
-        Compute hte dynamics, xdot = f(x, u)
-            x_com: state of the center of mass in world frame
+        Compute the dynamics, xdot = f(x, u)
         """
         # access the system parameters
         m = self.m
@@ -72,17 +81,7 @@ class MDROM:
                           [x_com[1]]]).reshape(2, 1)
         v_com = np.array([[x_com[2]],  # velocity of the center of mass
                           [x_com[3]]]).reshape(2, 1)
-        
-        # unpack the leg states
-        p_left = np.array([[x_left[0]],  # position of the left leg
-                           [x_left[1]]]).reshape(2, 1)
-        v_left = np.array([[x_left[2]],  # velocity of the left leg
-                           [x_left[3]]]).reshape(2, 1)
-        p_right = np.array([[x_right[0]],  # position of the right leg
-                            [x_right[1]]]).reshape(2, 1)
-        v_right = np.array([[x_right[2]],  # velocity of the right leg
-                            [x_right[3]]]).reshape(2, 1)
-        
+
         # Flight domain (F)
         if d == 'F':
             # compute the dynamics
@@ -152,7 +151,7 @@ class MDROM:
         return xdot    
 
     # interpolate the control input
-    def get_control_input(self, t, T, U):
+    def interpolate_control_input(self, t, T, U):
         """
         Interpolate the control input signal. 
         """
@@ -184,7 +183,7 @@ class MDROM:
         return u
     
     # def RK3 integration scheme
-    def RK3_rollout(self, x0_com, x0_left, x0_right, p0_feet, U, D0):
+    def RK3_rollout(self, x0_com, p_left, p_right, U, D0):
         """
         Runge-Kutta 3rd order integration scheme
         """
@@ -198,18 +197,15 @@ class MDROM:
         xt_com = np.zeros((4, N))
         xt_left = np.zeros((4, N))
         xt_right = np.zeros((4, N))
-        xt_com[:, 0] = x0_com.reshape(4) 
 
-        # get the feet positions
-        p_left = np.array([[x0_left[0]],  # position of the left leg
-                           [x0_left[1]]]).reshape(2, 1)
-        p_right = np.array([[x0_right[0]],  # position of the right leg
-                            [x0_right[1]]]).reshape(2, 1)
+        # initial conditions
+        x_left, x_right = self.update_leg_state(x0_com, p_left, p_right, U[:, 0], D0)
+        xt_left[:, 0] = x_left.reshape(4)
+        xt_right[:, 0] = x_right.reshape(4)
+        xt_com[:, 0] = x0_com.reshape(4) 
 
         # RK3 integration
         xk_com = x0_com
-        xk_left = x0_left
-        xk_right = x0_right
         dk = D0
         for i in range(0, N-1):
             # intermmidiate times
@@ -219,24 +215,24 @@ class MDROM:
             t3 = tk + dt
 
             # get the intermmediate inputs
-            u1 = self.get_control_input(t1, Tu, U)
-            u2 = self.get_control_input(t2, Tu, U)
-            u3 = self.get_control_input(t3, Tu, U)
+            u1 = self.interpolate_control_input(t1, Tu, U)
+            u2 = self.interpolate_control_input(t2, Tu, U)
+            u3 = self.interpolate_control_input(t3, Tu, U)
 
             # RK3 vector fields
             f1 = self.dynamics(xk_com, 
-                               xk_left, 
-                               xk_right, 
+                               p_left, 
+                               p_right, 
                                u1, 
                                dk)
             f2 = self.dynamics(xk_com + dt/2 * f1, 
-                               xk_left, 
-                               xk_right, 
+                               p_left, 
+                               p_right, 
                                u2, 
                                dk)
             f3 = self.dynamics(xk_com - dt*f1 + 2*dt*f2, 
-                               xk_left, 
-                               xk_right, 
+                               p_left, 
+                               p_right, 
                                u3, 
                                dk)
 
@@ -399,6 +395,12 @@ if __name__ == "__main__":
                                              K=100,
                                              interp='Z')
     
+    # declare the uniform distribution
+    distr_params = UniformDistribution(r_mean=system_params.l0,
+                                       r_delta=0.01,
+                                       theta_mean=0,
+                                       theta_delta=np.pi/17)
+
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
 
@@ -407,42 +409,28 @@ if __name__ == "__main__":
                        [0.75], # py [m]
                        [1],  # vx [m/s]
                        [0]]) # vz [m/s]
-    x0_left = np.array([[0.0],  # r [m]
-                        [0.0], # theta[rad]
-                        [0.0],  # rdot [m/s]
-                        [0.0]]) # thetadot [rad/s]
-    x0_right = np.array([[0.5], 
-                        [0.0], 
-                        [0.0], 
-                        [0.0]])
-    p0_feet = np.array([[0.0, 0.0], 
-                        [0.5, 0.0]])
+    p_left = np.array([[0.0],  # px [m]
+                       [0.0]]) # py [m]
+    p_right = np.array([[0.5],  # px [m]
+                        [0.0]]) # py [m]
     D0 = 'D'
 
     # control inputs
-    U = np.ones((2, control_params.N-1)) * 0.65
+    U_r = np.random.uniform(distr_params.r_mean - distr_params.r_delta,
+                            distr_params.r_mean + distr_params.r_delta,
+                            (2, control_params.N-1))
+    U_legs = np.random.uniform(distr_params.theta_mean - distr_params.theta_delta,
+                               distr_params.theta_mean + distr_params.theta_delta,
+                               (2, control_params.N-1))
+    # U = np.ones((4, control_params.N-1)) * 0.65
+    U = np.vstack((U_r, U_legs))
 
     # run the simulation
     t0 = time.time()
-    t, x_com, x_left, x_right = mdrom.RK3_rollout(x0_com, x0_left, x0_right, p0_feet, U, D0)
+    t, x_com, x_left, x_right = mdrom.RK3_rollout(x0_com, p_left, p_right, U, D0)
     tf = time.time()
     print('Simulation time: ', tf - t0)
 
-    # # # run the simulation
-    # sims = 500
-    # DT = []
-    # for i in range(0, sims):
-    #     t0 = time.time()
-    #     t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, p0_feet, U, D0)
-    #     tf = time.time()
-    #     dt = tf - t0
-    #     print('Iteration: ', i) 
-    #     print('Simulation time: ', dt)
-    #     DT.append(dt)
-    # DT = np.array(DT)
-    # print('Average simulation time: ', np.mean(DT))
-    # print('Frequency: ', np.mean(1/DT))
-    
     # plot the center of mass trajcetory
     plt.figure()
     plt.plot(0, 0, 'ko', label='ground')    
