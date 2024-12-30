@@ -93,54 +93,54 @@ class MDROM:
         # Left leg stance domain (L)
         elif d == 'L':
             # compute the leg state
-            rL = p_left - p_com
-            rL_norm = np.linalg.norm(rL)
-            rL_hat = rL / rL_norm
+            r_vec_L = p_left - p_com
+            r_norm_L = np.linalg.norm(r_vec_L)
+            r_hat_L = r_vec_L / r_norm_L
 
             # get the control input
-            vL = u[0]
-            uL = k * (vL - l0)
+            v_L = u[0]
+            u_L = k * (v_L - l0)
 
             # compute the dynamics
-            a_left = -(rL_hat/m) * (k * (l0 - rL_norm) + b * (v_com.T @ rL_hat) + uL)
+            a_left = -(r_hat_L/m) * (k * (l0 - r_norm_L) + b * (v_com.T @ r_hat_L) + u_L)
             a_com = a_left + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
 
         # Right leg stance domain (R)
         elif d == 'R':
             # compute the leg state
-            rR = p_right - p_com
-            rR_norm = np.linalg.norm(rR)
-            rR_hat = rR / rR_norm
+            r_vec_R = p_right - p_com
+            r_norm_R = np.linalg.norm(r_vec_R)
+            r_hat_R = r_vec_R / r_norm_R
 
             # get the control input
-            vR = u[1]
-            uR = k * (vR - l0)
+            v_R = u[1]
+            u_R = k * (v_R - l0)
 
             # compute the dynamics
-            a_right = -(rR_hat/m) * (k * (l0 - rR_norm) + b * (v_com.T @ rR_hat) + uR)
+            a_right = -(r_hat_R/m) * (k * (l0 - r_norm_R) + b * (v_com.T @ r_hat_R) + u_R)
             a_com = a_right + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
 
         # Double stance domain (D)
         elif d == 'D':
             # compute the leg state
-            rL = p_left - p_com
-            rR = p_right - p_com
-            rL_norm = np.linalg.norm(rL)
-            rR_norm = np.linalg.norm(rR)
-            rL_hat = rL / rL_norm
-            rR_hat = rR / rR_norm
+            r_vec_L = p_left - p_com
+            r_vec_R = p_right - p_com
+            r_norm_L = np.linalg.norm(r_vec_L)
+            r_norm_R = np.linalg.norm(r_vec_R)
+            r_hat_L = r_vec_L / r_norm_L
+            r_hat_R = r_vec_R / r_norm_R
 
             # get the control input
-            vL = u[0]
-            vR = u[1]
-            uL = k * (vL - l0)
-            uR = k * (vR - l0)
+            v_L = u[0]
+            v_R = u[1]
+            u_L = k * (v_L - l0)
+            u_R = k * (v_R - l0)
 
             # compute the dynamics
-            a_left =  -(rL_hat/m) * (k * (l0 - rL_norm) + b * (v_com.T @ rL_hat) + uL)
-            a_right = -(rR_hat/m) * (k * (l0 - rR_norm) + b * (v_com.T @ rR_hat) + uR)
+            a_left = -(r_hat_L/m) * (k * (l0 - r_norm_L) + b * (v_com.T @ r_hat_L) + u_L)
+            a_right = -(r_hat_R/m) * (k * (l0 - r_norm_R) + b * (v_com.T @ r_hat_R) + u_R)
             a_com = a_left + a_right + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
         
@@ -394,7 +394,7 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=500, 
+    control_params = PredictiveControlParams(N=100, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
@@ -405,8 +405,8 @@ if __name__ == "__main__":
     # initial conditions
     x0_com = np.array([[0.25], # px [m]
                        [0.75], # py [m]
-                       [0],  # vx [m/s]
-                       [0]]) # vy [m/s]
+                       [1],  # vx [m/s]
+                       [0]]) # vz [m/s]
     x0_left = np.array([[0.0],  # r [m]
                         [0.0], # theta[rad]
                         [0.0],  # rdot [m/s]
@@ -464,6 +464,7 @@ if __name__ == "__main__":
     plt.plot(t, x_right[0, :], label='right')
     plt.xlabel('time [s]')
     plt.ylabel('r [m]')
+    plt.grid()
     plt.legend()
 
     plt.subplot(2, 2, 2)
@@ -471,6 +472,7 @@ if __name__ == "__main__":
     plt.plot(t, x_right[1, :], label='right')
     plt.xlabel('time [s]')
     plt.ylabel('theta [rad]')
+    plt.grid()
     plt.legend()
 
     plt.subplot(2, 2, 3)
@@ -478,6 +480,7 @@ if __name__ == "__main__":
     plt.plot(t, x_right[2, :], label='right')
     plt.xlabel('time [s]')
     plt.ylabel('rdot [m/s]')
+    plt.grid()
     plt.legend()
 
     plt.subplot(2, 2, 4)
@@ -485,6 +488,7 @@ if __name__ == "__main__":
     plt.plot(t, x_right[3, :], label='right')
     plt.xlabel('time [s]')
     plt.ylabel('thetadot [rad/s]')
+    plt.grid()
     plt.legend()
     
     plt.show()
