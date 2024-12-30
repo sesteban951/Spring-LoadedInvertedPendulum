@@ -5,6 +5,7 @@
 import numpy as np
 from matplotlib import pyplot as plt
 from dataclasses import dataclass
+import time
 
 #######################################################################
 # DATA CLASSES
@@ -146,12 +147,12 @@ class MDROM:
         return xdot    
 
     # interpolate the control input
-    def get_control_input(self, t, Tu, U):
+    def get_control_input(self, t, T, U):
         """
         Interpolate the control input signal. 
         """
         # find which interval the time belongs to
-        idx = np.where(Tu <= t)[0][-1]
+        idx = np.where(T <= t)[0][-1]
 
         # zero order hold interpolation
         if self.interp == 'Z':
@@ -161,26 +162,24 @@ class MDROM:
         # linear interpolation
         elif self.interp == 'L':
             # beyond the last knot
-            if idx == len(Tu) - 1:
+            if idx == len(T) - 1:
                 u = U[:, idx]
 
             # within an interval
             else:
                 # knot ends
-                t0 = Tu[idx]
-                tf = Tu[idx+1]
+                t0 = T[idx]
+                tf = T[idx+1]
                 u0 = U[:, idx]
                 uf = U[:, idx+1]
 
                 # linear interpolation
                 u = u0 + (uf - u0) * (t - t0) / (tf - t0)
- 
-        print(u)
 
         return u
     
     # def RK3 integration scheme
-    def RK3_rollout(self, x0_com, x0_left, x0_right, U, D0):
+    def RK3_rollout(self, x0_com, x0_left, x0_right, p0_feet, U, D0):
         """
         Runge-Kutta 3rd order integration scheme
         """
@@ -233,13 +232,29 @@ class MDROM:
             xt_com[:, i+1] = xk_com.reshape(4)
 
         return Tx, xt_com
+    
+    # update leg polar state
+    def update_leg_state(self, x_com, x_left_cart, x_right_cart):
 
-    # Touch-Down (TD) switching surafce
-    # def S_TD(self, x_com, x_left, x_right):
+        # unpack COM state
+        p_com = np.array([[x_com[0]],  
+                          [x_com[1]]]).reshape(2, 1)
+        v_com = np.array([[x_com[2]],
+                          [x_com[3]]]).reshape(2, 1)
+        
+        # compute the leg states
+        p_left = np.array([[x_left_cart[0]],
+                           [x_left_cart[1]]]).reshape(2, 1)
+        p_right = np.array([[x_right_cart[0]],
+                            [x_right_cart[1]]]).reshape(2, 1) 
+        
+        # compute polar states
+        rL_vec = p_left - p_com
+        r = np.linalg.norm(rL_vec)
+        theta = 
+
 
         
-    #     pz_com = x_com[1]
-
 
 #######################################################################
 # MAIN
@@ -264,25 +279,45 @@ if __name__ == "__main__":
     mdrom = MDROM(system_params, control_params)
 
     # initial conditions
-    x0_com = np.array([[0.25], 
-                       [0.75], 
-                       [1.0], 
-                       [5.0]])
-    x0_left = np.array([[0.0], 
-                        [0.0], 
-                        [0.0], 
-                        [0.0]])
+    x0_com = np.array([[0.25], # px [m]
+                       [0.75], # py [m]
+                       [1.0],  # vx [m/s]
+                       [5.0]]) # vy [m/s]
+    x0_left = np.array([[0.0],  # r [m]
+                        [0.0], # theta[rad]
+                        [0.0],  # rdot [m/s]
+                        [0.0]]) # thetadot [rad/s]
     x0_right = np.array([[0.5], 
                         [0.0], 
                         [0.0], 
                         [0.0]])
-    D0 = 'R'
+    p0_feet = np.array([[0.0, 0.0], 
+                        [0.5, 0.0]])
+    D0 = 'D'
 
     # control inputs
     U = np.ones((2, control_params.N-1)) * 0.65
 
     # run the simulation
-    t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, U, D0)
+    t0 = time.time()
+    t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, p0_feet, U, D0)
+    tf = time.time()
+    print('Simulation time: ', tf - t0)
+
+    # # run the simulation
+    # sims = 500
+    # DT = []
+    # for i in range(0, sims):
+    #     t0 = time.time()
+    #     t, x = mdrom.RK3_rollout(x0_com, x0_left, x0_right, p0_feet, U, D0)
+    #     tf = time.time()
+    #     dt = tf - t0
+    #     print('Iteration: ', i) 
+    #     print('Simulation time: ', dt)
+    #     DT.append(dt)
+    # DT = np.array(DT)
+    # print('Average simulation time: ', np.mean(DT))
+    # print('Frequency: ', np.mean(1/DT))
     
     plt.figure()
     plt.plot(0, 0, 'ko', label='ground')    
