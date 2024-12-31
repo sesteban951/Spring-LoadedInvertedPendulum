@@ -37,10 +37,11 @@ class UniformDistribution:
     """
     Uniform distribution parameters
     """
-    r_mean: float      # prismatic leg center [m]
-    r_delta: float     # prismatic leg delta range [m]
-    theta_mean: float  # revolute leg center [rad]
-    theta_delta: float # revolute leg delta range [rad]
+    r_mean: np.array     # prismatic leg center [m]
+    r_delta: float       # prismatic leg delta range [m]
+    theta_mean: np.array # revolute leg center [rad]
+    theta_delta: float   # revolute leg delta range [rad]
+
 
 #######################################################################
 # DYNMICS
@@ -142,11 +143,6 @@ class MDROM:
             a_right = -(r_hat_R/m) * (k * (l0 - r_norm_R) + b * (v_com.T @ r_hat_R) + u_R)
             a_com = a_left + a_right + np.array([[0], [-g]])
             xdot = np.vstack((v_com, a_com))
-        
-        # get the polar leg states
-        # x_left, x_right = self.update_leg_state(x_com, p_left, p_right, u, d)
-        # print('x_left: ', x_left)
-        # print('x_right: ', x_right)
 
         return xdot    
 
@@ -236,9 +232,11 @@ class MDROM:
                                u3, 
                                dk)
 
-            # take the step
+            # take the step and update all states
             xk_com = xk_com + (dt/6) * (f1 + 4*f2 + f3)
             x_left, x_right = self.update_leg_state(xk_com, p_left, p_right, u1, dk)
+
+            # TODO: check if you hit a switching surface
 
             # store the states
             xt_com[:, i+1] = xk_com.reshape(4)
@@ -249,7 +247,9 @@ class MDROM:
     
     # update leg polar state
     def update_leg_state(self, x_com, p_left, p_right, u, D):
-
+        """
+        Update the leg state based on the COM state and control input
+        """
         # unpack COM state
         p_com = np.array([[x_com[0]],  
                           [x_com[1]]]).reshape(2, 1)
@@ -285,19 +285,19 @@ class MDROM:
             rdot_z_L = rdot_vec_L[1]
 
             # compute the left leg state in polar coordinates
-            rL = np.linalg.norm(r_vec_L)
+            r_L = np.linalg.norm(r_vec_L)
             rdot_L = -v_com.T @ r_hat_L
             theta_L = -np.arctan2(r_x_L, -r_z_L)
-            thetadot_L = (r_z_L * rdot_x_L - r_x_L * rdot_z_L) / rL
+            thetadot_L = (r_z_L * rdot_x_L - r_x_L * rdot_z_L) / r_L
 
             # TODO: apply the control input, U
             u = None
 
             # pack into state vectors
-            x_left = np.array([[rL],
-                               [theta_L],
-                               [rdot_L],
-                               [thetadot_L]])
+            x_left = np.array([[r_L],
+                               [theta_L[0]],
+                               [rdot_L[0][0]],
+                               [thetadot_L[0]]])
             x_right = np.array([[self.l0],
                                 [0.0],
                                 [0.0],
@@ -316,10 +316,10 @@ class MDROM:
             rdot_z_R = rdot_vec_R[1]
 
             # compute the right leg state in polar coordinates
-            rR = np.linalg.norm(r_vec_R)
+            r_R = np.linalg.norm(r_vec_R)
             rdot_R = -v_com.T @ r_hat_R
             theta_R = -np.arctan2(r_x_R, -r_z_R)
-            thetadot_R = (r_z_R * rdot_x_R - r_x_R * rdot_z_R) / rR
+            thetadot_R = (r_z_R * rdot_x_R - r_x_R * rdot_z_R) / r_R
 
             # TODO: apply the control input, U
             u = None
@@ -329,10 +329,10 @@ class MDROM:
                                [0.0],
                                [0.0],
                                [0.0]])
-            x_right = np.array([[rR],
-                                [theta_R],
-                                [rdot_R],
-                                [thetadot_R]])
+            x_right = np.array([[r_R],
+                                [theta_R[0]],
+                                [rdot_R[0][0]],
+                                [thetadot_R[0]]])
 
         # in double support (leg state governed by dynamics)
         if D == 'D':
@@ -353,28 +353,64 @@ class MDROM:
             rdot_z_R = rdot_vec_R[1]
 
             # compute the leg state in polar coordinates
-            rL = np.linalg.norm(r_vec_L)
-            rR = np.linalg.norm(r_vec_R)
-            r_hat_L = r_vec_L / rL
-            r_hat_R = r_vec_R / rR
+            r_L = np.linalg.norm(r_vec_L)
+            r_R = np.linalg.norm(r_vec_R)
+            r_hat_L = r_vec_L / r_L
+            r_hat_R = r_vec_R / r_R
             rdot_L = -v_com.T @ r_hat_L
             rdot_R = -v_com.T @ r_hat_R
             theta_L = -np.arctan2(r_x_L, -r_z_L)
             theta_R = -np.arctan2(r_x_R, -r_z_R)
-            thetadot_L = (r_z_L * rdot_x_L - r_x_L * rdot_z_L) / rL
-            thetadot_R = (r_z_R * rdot_x_R - r_x_R * rdot_z_R) / rR
+            thetadot_L = (r_z_L * rdot_x_L - r_x_L * rdot_z_L) / r_L
+            thetadot_R = (r_z_R * rdot_x_R - r_x_R * rdot_z_R) / r_R
             
             # pack into state vectors
-            x_left = np.array([[rL],
+            x_left = np.array([[r_L],
                             [theta_L[0]],
                             [rdot_L[0][0]],
                             [thetadot_L[0]]])
-            x_right = np.array([[rR],
+            x_right = np.array([[r_R],
                                 [theta_R[0]],
                                 [rdot_R[0][0]],
                                 [thetadot_R[0]]])
             
         return x_left, x_right
+
+    # Touch-Down (TD) Switching Surface -- checks individual legs
+    def S_TD(self, x_com, x_leg):
+        
+        # get relevant states
+        pz = x_com[1]
+        vz = x_com[3]
+        r = x_leg[0]
+        theta = x_leg[1]
+        rdot = x_leg[2]
+        thetadot = x_leg[3]
+
+        # compute the foot position and velocity
+        pz_foot = pz - r * np.cos(theta)
+        vz_foot = vz - rdot * np.cos(theta) + r * thetadot * np.sin(theta)
+
+        # check the switching surface conditions
+        gnd_pos = (pz_foot <= 0.0)      # foot is touching the ground or below
+        neg_vel = (vz_foot <= 0.0)      # foot is moving downward
+        touchdown = gnd_pos and neg_vel # if true, foot has touched the ground
+
+        return touchdown
+
+    # Take-Off (TO) Switching Surface -- checks individual legs
+    def S_TO(self, x_com, x_leg):
+
+        # get relevant states
+        r = x_leg[0]
+        rdot = x_leg[2]
+
+        # check the switching surface conditions
+        nom_length = (r >= self.l0)      # the leg is at its nominal uncompressed length
+        pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
+        takeoff = nom_length and pos_vel # if true, leg has taken off into flight
+
+        return takeoff
 
 #######################################################################
 # MAIN
@@ -390,30 +426,36 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=100, 
+    control_params = PredictiveControlParams(N=300, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
-    
+
     # declare the uniform distribution
-    distr_params = UniformDistribution(r_mean=system_params.l0,
-                                       r_delta=0.01,
-                                       theta_mean=0,
-                                       theta_delta=np.pi/17)
+    # r_mean = np.ones(control_params.N-1) * system_params.l0
+    r_mean = system_params.l0
+    r_delta = 0.0
+    # thtea_mean = np.ones(control_params.N-1) * 0.0
+    theta_mean = 0.0
+    theta_delta = 0.0
+    distr_params = UniformDistribution(r_mean = r_mean,
+                                       r_delta = r_delta,
+                                       theta_mean = theta_mean,
+                                       theta_delta = theta_delta)
 
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
 
     # initial conditions
     x0_com = np.array([[0.25], # px [m]
-                       [0.75], # py [m]
+                       [2.75], # py [m]
                        [1],  # vx [m/s]
                        [0]]) # vz [m/s]
     p_left = np.array([[0.0],  # px [m]
                        [0.0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
                         [0.0]]) # py [m]
-    D0 = 'D'
+    D0 = 'F'
 
     # control inputs
     U_r = np.random.uniform(distr_params.r_mean - distr_params.r_delta,
