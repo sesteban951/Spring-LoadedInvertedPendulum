@@ -193,16 +193,23 @@ class MDROM:
         xt_com = np.zeros((4, N))
         xt_left = np.zeros((4, N))
         xt_right = np.zeros((4, N))
+        pt_left = np.zeros((2, N))
+        pt_right = np.zeros((2, N))
+        D = [None for _ in range(N)]
 
         # initial conditions
         x_left, x_right = self.update_leg_state(x0_com, p_left, p_right, U[:, 0], D0)
         xt_left[:, 0] = x_left.reshape(4)
         xt_right[:, 0] = x_right.reshape(4)
         xt_com[:, 0] = x0_com.reshape(4) 
+        pt_left[:, 0] = p_left.reshape(2)
+        pt_right[:, 0] = p_right.reshape(2)
+        D[0] = D0
 
         # RK3 integration
         xk_com = x0_com
         Dk = D0
+        contacts = self.contact_identification(Dk)
         for i in range(0, N-1):
             # intermmidiate times
             tk = i * dt
@@ -236,18 +243,26 @@ class MDROM:
             xk_com = xk_com + (dt/6) * (f1 + 4*f2 + f3)
             x_left, x_right = self.update_leg_state(xk_com, p_left, p_right, u1, Dk)
 
-            # check if hit switching surfaces and update
-            contacts = self.contact_identification(Dk)
-            contacts = self.check_switching(xk_com, x_left, x_right, contacts)
-            Dk = self.domain_identification(contacts)
-            print(Dk)
+            # check if hit switching surfaces and update state needed
+            checked_contacts = self.check_switching(xk_com, x_left, x_right, contacts)
+            if checked_contacts != contacts:
+                
+                # update the feet positions
+                p_left, p_right = self.apply_reset(xk_com, x_left, x_right, contacts, checked_contacts)
+                
+                # update domain and contact info
+                Dk = self.domain_identification(checked_contacts)
+                contacts = checked_contacts
 
             # store the states
             xt_com[:, i+1] = xk_com.reshape(4)
             xt_left[:, i+1] = x_left.reshape(4)
             xt_right[:, i+1] = x_right.reshape(4)
+            pt_left[:, i+1] = p_left.reshape(2)
+            pt_right[:, i+1] = p_right.reshape(2)
+            D[i+1] = Dk
 
-        return Tx, xt_com, xt_left, xt_right
+        return Tx, xt_com, xt_left, xt_right, pt_left, pt_right, D
     
     # update leg polar state
     def update_leg_state(self, x_com, p_left, p_right, u, D):
@@ -466,9 +481,57 @@ class MDROM:
             contact = True
 
         return contact
+
+    # apply a reset map
+    def apply_reset(self, x_com, x_left, x_right, contacts_prev, contacts_new):
+
+        # unapck the contact values
+        contact_prev_L = contacts_prev[0]
+        contact_prev_R = contacts_prev[1]
+        contact_new_L = contacts_new[0]
+        contact_new_R = contacts_new[1]
+
+        # unpack the states
+        p_com = np.array([[x_com[0]],
+                          [x_com[1]]]).reshape(2, 1)
+        
+        # Left leg update
+        if contact_prev_L != contact_new_L:
+            # get the leg state
+            r_L = x_left[0][0]
+            theta_L = x_left[1][0]
+            
+            # TODO: right now this is a rough estimate consider better estimate
+            px_left_COM = -r_L * np.sin(theta_L)
+            px_left = p_com[0][0] + px_left_COM
+            pz_left = 0.0  
+
+            # update the left leg
+            p_left = np.array([[px_left],[pz_left]])
+        else:
+            p_left = np.array([[None],
+                               [None]])
+
+        # Right leg update
+        if contact_prev_R != contact_new_R:
+            # get the leg state
+            r_R = x_right[0][0]
+            theta_R = x_right[1][0]
+
+            # TODO: right now this is a rough estimate consider better estimate
+            px_right_COM = -r_R * np.sin(theta_R)
+            px_right = p_com[0][0] + px_right_COM
+            pz_right = 0.0
+
+            # update the right leg
+            p_right = np.array([[px_right],[pz_right]])
+        else:
+            p_right = np.array([[None],
+                                [None]])
+
+        return p_left, p_right
     
     # Domain mapping function
-    # TODO: can probably use a dictionary for this?
     def domain_identification(self, contacts):
         """
         Map the contact state to a unique domain
@@ -493,7 +556,6 @@ class MDROM:
         return D
     
     # Domain mapping function
-    # TODO: can probably use a dictionary for this?
     def contact_identification(self, D):
         """
         Simple contact identification
@@ -527,7 +589,7 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=100, 
+    control_params = PredictiveControlParams(N=500, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
@@ -552,10 +614,10 @@ if __name__ == "__main__":
                        [2.75], # py [m]
                        [1],  # vx [m/s]
                        [1]]) # vz [m/s]
-    p_left = np.array([[0.0],  # px [m]
-                       [0.0]]) # py [m]
-    p_right = np.array([[0.5],  # px [m]
-                        [0.0]]) # py [m]
+    p_left = np.array([[None],  # px [m]
+                       [None]]) # py [m]
+    p_right = np.array([[None],  # px [m]
+                        [None]]) # py [m]
     D0 = 'F'
 
     # random control inputs
@@ -568,21 +630,32 @@ if __name__ == "__main__":
     # U = np.vstack((U_r, U_legs))
 
     # constant fixed control inputs
-    u_constant = np.array([[system_params.l0 * 0.98], # left leg
-                           [system_params.l0], # right leg
+    u_constant = np.array([[system_params.l0 *1.0], # left leg
+                           [system_params.l0*1.0], # right leg
                            [np.pi/6],   # left leg
                            [-np.pi/6]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation
     t0 = time.time()
-    t, x_com, x_left, x_right = mdrom.RK3_rollout(x0_com, p_left, p_right, U, D0)
+    t, x_com, x_left, x_right, p_left, p_right, D = mdrom.RK3_rollout(x0_com, p_left, p_right, U, D0)
     tf = time.time()
     print('Simulation time: ', tf - t0)
 
+    print(t.shape)
+    print(x_com.shape)
+    print(x_left.shape)
+    print(x_right.shape)
+    print(p_left.shape)
+    print(p_right.shape)
+    print(len(D))
+
     # plot the center of mass trajcetory
     plt.figure()
-    plt.plot(0, 0, 'ko', label='ground')    
+
+    # draw straight black line to represent the ground
+    plt.plot([-1, 1], [0, 0], 'k-')
+
     plt.plot(x_com[0, :], x_com[1, :], label='x')
     plt.plot(x0_com[0], x0_com[1], 'go', label='x0')
     plt.plot(x_com[0, -1], x_com[1, -1], 'rx', label='xf')
@@ -629,3 +702,7 @@ if __name__ == "__main__":
     # plt.legend()
     
     # plt.show()
+
+    # 805-994-8429
+    # Crystal 
+    # 25$
