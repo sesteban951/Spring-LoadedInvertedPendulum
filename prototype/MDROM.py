@@ -202,7 +202,7 @@ class MDROM:
 
         # RK3 integration
         xk_com = x0_com
-        dk = D0
+        Dk = D0
         for i in range(0, N-1):
             # intermmidiate times
             tk = i * dt
@@ -220,23 +220,27 @@ class MDROM:
                                p_left, 
                                p_right, 
                                u1, 
-                               dk)
+                               Dk)
             f2 = self.dynamics(xk_com + dt/2 * f1, 
                                p_left, 
                                p_right, 
                                u2, 
-                               dk)
+                               Dk)
             f3 = self.dynamics(xk_com - dt*f1 + 2*dt*f2, 
                                p_left, 
                                p_right, 
                                u3, 
-                               dk)
+                               Dk)
 
             # take the step and update all states
             xk_com = xk_com + (dt/6) * (f1 + 4*f2 + f3)
-            x_left, x_right = self.update_leg_state(xk_com, p_left, p_right, u1, dk)
+            x_left, x_right = self.update_leg_state(xk_com, p_left, p_right, u1, Dk)
 
-            # TODO: check if you hit a switching surface
+            # check if hit switching surfaces and update
+            contacts = self.contact_identification(Dk)
+            contacts = self.check_switching(xk_com, x_left, x_right, contacts)
+            Dk = self.domain_identification(contacts)
+            print(Dk)
 
             # store the states
             xt_com[:, i+1] = xk_com.reshape(4)
@@ -259,16 +263,19 @@ class MDROM:
         # in flight (state governed by kinemaitc input)
         if D == 'F':
 
-            # TODO: apply the control input, U
-            u = None
+            # TODO: also get the velocity from the control input
+            r_L = u[0]
+            r_R = u[1]
+            theta_L = u[2]
+            theta_R = u[3]
 
             # pack into state vectors
-            x_left = np.array([[self.l0],
-                               [0.0],
+            x_left = np.array([[r_L],
+                               [theta_L],
                                [0.0],
                                [0.0]])
-            x_right = np.array([[self.l0],
-                                [0.0],
+            x_right = np.array([[r_R],
+                                [theta_R],
                                 [0.0],
                                 [0.0]])
         
@@ -290,16 +297,17 @@ class MDROM:
             theta_L = -np.arctan2(r_x_L, -r_z_L)
             thetadot_L = (r_z_L * rdot_x_L - r_x_L * rdot_z_L) / r_L
 
-            # TODO: apply the control input, U
-            u = None
+            # TODO: also get the velocity from the control input
+            r_R = u[1]
+            theta_R = u[3]
 
             # pack into state vectors
             x_left = np.array([[r_L],
                                [theta_L[0]],
                                [rdot_L[0][0]],
                                [thetadot_L[0]]])
-            x_right = np.array([[self.l0],
-                                [0.0],
+            x_right = np.array([[r_R],
+                                [theta_R],
                                 [0.0],
                                 [0.0]])
 
@@ -321,12 +329,13 @@ class MDROM:
             theta_R = -np.arctan2(r_x_R, -r_z_R)
             thetadot_R = (r_z_R * rdot_x_R - r_x_R * rdot_z_R) / r_R
 
-            # TODO: apply the control input, U
-            u = None
+            # TODO: also get the velocity from the control input
+            r_L = u[0]
+            theta_L = u[2]
 
             # pack into state vectors
-            x_left = np.array([[self.l0],
-                               [0.0],
+            x_left = np.array([[r_L],
+                               [theta_L],
                                [0.0],
                                [0.0]])
             x_right = np.array([[r_R],
@@ -376,9 +385,41 @@ class MDROM:
             
         return x_left, x_right
 
+    # check switching surfaces
+    def check_switching(self, x_com, x_left, x_right, contacts):
+        """
+        Check if the state has hit any switching surfaces
+        """
+        # unpack the contact values
+        contact_L = contacts[0]
+        contact_R = contacts[1]
+
+        # Left Leg
+        if contact_L == False:
+            # check for touchdown
+            contact_result_L = self.S_TD(x_com, x_left)
+        elif contact_L == True:
+            # check for takeoff
+            contact_result_L = self.S_TO(x_com, x_left)
+
+        # Right Leg
+        if contact_R == False:
+            # check for touchdown
+            contact_result_R = self.S_TD(x_com, x_right)
+        elif contact_R == True:
+            # check for takeoff
+            contact_result_R = self.S_TO(x_com, x_right)
+
+        # update the contact values
+        contacts = [contact_result_L, contact_result_R]
+
+        return contacts
+
     # Touch-Down (TD) Switching Surface -- checks individual legs
     def S_TD(self, x_com, x_leg):
-        
+        """
+        Check if a leg has touched the ground
+        """
         # get relevant states
         pz = x_com[1]
         vz = x_com[3]
@@ -396,11 +437,19 @@ class MDROM:
         neg_vel = (vz_foot <= 0.0)      # foot is moving downward
         touchdown = gnd_pos and neg_vel # if true, foot has touched the ground
 
-        return touchdown
+        # return the contact result
+        if touchdown==True:
+            contact = True
+        elif touchdown==False:
+            contact = False
+
+        return contact
 
     # Take-Off (TO) Switching Surface -- checks individual legs
     def S_TO(self, x_com, x_leg):
-
+        """
+        Check if a leg has taken off from the ground
+        """
         # get relevant states
         r = x_leg[0]
         rdot = x_leg[2]
@@ -410,7 +459,59 @@ class MDROM:
         pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel # if true, leg has taken off into flight
 
-        return takeoff
+        # return the contact result
+        if takeoff==True:
+            contact = False
+        elif takeoff==False:
+            contact = True
+
+        return contact
+    
+    # Domain mapping function
+    # TODO: can probably use a dictionary for this?
+    def domain_identification(self, contacts):
+        """
+        Map the contact state to a unique domain
+        """
+        # unpack the contact values
+        contact_L = contacts[0]
+        contact_R = contacts[1]
+
+        # Flight (F)
+        if (contact_L == False) and (contact_R == False):
+            D = 'F'
+        # Left leg support (L)
+        elif (contact_L == True) and (contact_R == False):
+            D = 'L'
+        # Right leg support (R)
+        elif (contact_L == False) and (contact_R == True):
+            D = 'R'
+        # Double leg support (D)
+        elif (contact_L == True) and (contact_R == True):
+            D = 'D'
+        
+        return D
+    
+    # Domain mapping function
+    # TODO: can probably use a dictionary for this?
+    def contact_identification(self, D):
+        """
+        Simple contact identification
+        """
+        # Flight (F)
+        if D == 'F':
+            contacts = [False, False]
+        # Left leg support (L)
+        elif D == 'L':
+            contacts = [True, False]
+        # Right leg support (R)
+        elif D == 'R':
+            contacts = [False, True]
+        # Double leg support (D)
+        elif D == 'D':
+            contacts = [True, True]
+        
+        return contacts
 
 #######################################################################
 # MAIN
@@ -426,7 +527,7 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=300, 
+    control_params = PredictiveControlParams(N=100, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
@@ -450,22 +551,28 @@ if __name__ == "__main__":
     x0_com = np.array([[0.25], # px [m]
                        [2.75], # py [m]
                        [1],  # vx [m/s]
-                       [0]]) # vz [m/s]
+                       [1]]) # vz [m/s]
     p_left = np.array([[0.0],  # px [m]
                        [0.0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
                         [0.0]]) # py [m]
     D0 = 'F'
 
-    # control inputs
-    U_r = np.random.uniform(distr_params.r_mean - distr_params.r_delta,
-                            distr_params.r_mean + distr_params.r_delta,
-                            (2, control_params.N-1))
-    U_legs = np.random.uniform(distr_params.theta_mean - distr_params.theta_delta,
-                               distr_params.theta_mean + distr_params.theta_delta,
-                               (2, control_params.N-1))
-    # U = np.ones((4, control_params.N-1)) * 0.65
-    U = np.vstack((U_r, U_legs))
+    # random control inputs
+    # U_r = np.random.uniform(distr_params.r_mean - distr_params.r_delta,
+    #                         distr_params.r_mean + distr_params.r_delta,
+    #                         (2, control_params.N-1))
+    # U_legs = np.random.uniform(distr_params.theta_mean - distr_params.theta_delta,
+    #                            distr_params.theta_mean + distr_params.theta_delta,
+    #                            (2, control_params.N-1))
+    # U = np.vstack((U_r, U_legs))
+
+    # constant fixed control inputs
+    u_constant = np.array([[system_params.l0 * 0.98], # left leg
+                           [system_params.l0], # right leg
+                           [np.pi/6],   # left leg
+                           [-np.pi/6]]) # right leg
+    U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation
     t0 = time.time()
@@ -486,39 +593,39 @@ if __name__ == "__main__":
     plt.legend()
     plt.show()
 
-    # plot the leg states
-    plt.figure()
+    # # plot the leg states
+    # plt.figure()
 
-    plt.subplot(2, 2, 1)
-    plt.plot(t, x_left[0, :], label='left')
-    plt.plot(t, x_right[0, :], label='right')
-    plt.xlabel('time [s]')
-    plt.ylabel('r [m]')
-    plt.grid()
-    plt.legend()
+    # plt.subplot(2, 2, 1)
+    # plt.plot(t, x_left[0, :], label='left')
+    # plt.plot(t, x_right[0, :], label='right')
+    # plt.xlabel('time [s]')
+    # plt.ylabel('r [m]')
+    # plt.grid()
+    # plt.legend()
 
-    plt.subplot(2, 2, 2)
-    plt.plot(t, x_left[1, :], label='left')
-    plt.plot(t, x_right[1, :], label='right')
-    plt.xlabel('time [s]')
-    plt.ylabel('theta [rad]')
-    plt.grid()
-    plt.legend()
+    # plt.subplot(2, 2, 2)
+    # plt.plot(t, x_left[1, :], label='left')
+    # plt.plot(t, x_right[1, :], label='right')
+    # plt.xlabel('time [s]')
+    # plt.ylabel('theta [rad]')
+    # plt.grid()
+    # plt.legend()
 
-    plt.subplot(2, 2, 3)
-    plt.plot(t, x_left[2, :], label='left')
-    plt.plot(t, x_right[2, :], label='right')
-    plt.xlabel('time [s]')
-    plt.ylabel('rdot [m/s]')
-    plt.grid()
-    plt.legend()
+    # plt.subplot(2, 2, 3)
+    # plt.plot(t, x_left[2, :], label='left')
+    # plt.plot(t, x_right[2, :], label='right')
+    # plt.xlabel('time [s]')
+    # plt.ylabel('rdot [m/s]')
+    # plt.grid()
+    # plt.legend()
 
-    plt.subplot(2, 2, 4)
-    plt.plot(t, x_left[3, :], label='left')
-    plt.plot(t, x_right[3, :], label='right')
-    plt.xlabel('time [s]')
-    plt.ylabel('thetadot [rad/s]')
-    plt.grid()
-    plt.legend()
+    # plt.subplot(2, 2, 4)
+    # plt.plot(t, x_left[3, :], label='left')
+    # plt.plot(t, x_right[3, :], label='right')
+    # plt.xlabel('time [s]')
+    # plt.ylabel('thetadot [rad/s]')
+    # plt.grid()
+    # plt.legend()
     
-    plt.show()
+    # plt.show()
