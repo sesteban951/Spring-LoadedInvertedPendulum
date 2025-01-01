@@ -589,7 +589,7 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=500, 
+    control_params = PredictiveControlParams(N=200, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
@@ -650,21 +650,30 @@ if __name__ == "__main__":
     print(p_right.shape)
     print(len(D))
 
-    # plot the center of mass trajcetory
-    plt.figure()
+    # save the data into CSV files
+    np.savetxt('./data/time.csv', t, delimiter=',')
+    np.savetxt('./data/state_com.csv', x_com.T, delimiter=',')
+    np.savetxt('./data/state_left.csv', x_left.T, delimiter=',')
+    np.savetxt('./data/state_right.csv', x_right.T, delimiter=',')
+    np.savetxt('./data/pos_left.csv', p_left.T, delimiter=',')
+    np.savetxt('./data/pos_right.csv', p_right.T, delimiter=',')
+    np.savetxt('./data/domain.csv', D, delimiter=',', fmt='%s')
 
-    # draw straight black line to represent the ground
-    plt.plot([-1, 1], [0, 0], 'k-')
+    # # plot the center of mass trajcetory
+    # plt.figure()
 
-    plt.plot(x_com[0, :], x_com[1, :], label='x')
-    plt.plot(x0_com[0], x0_com[1], 'go', label='x0')
-    plt.plot(x_com[0, -1], x_com[1, -1], 'rx', label='xf')
-    plt.xlabel('x [m]')
-    plt.ylabel('y [m]')
-    plt.grid()
-    plt.axis('equal') 
-    plt.legend()
-    plt.show()
+    # # draw straight black line to represent the ground
+    # plt.plot([-1, 1], [0, 0], 'k-')
+
+    # plt.plot(x_com[0, :], x_com[1, :], label='x')
+    # plt.plot(x0_com[0], x0_com[1], 'go', label='x0')
+    # plt.plot(x_com[0, -1], x_com[1, -1], 'rx', label='xf')
+    # plt.xlabel('x [m]')
+    # plt.ylabel('y [m]')
+    # plt.grid()
+    # plt.axis('equal') 
+    # plt.legend()
+    # plt.show()
 
     # # plot the leg states
     # plt.figure()
