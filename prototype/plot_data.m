@@ -41,8 +41,8 @@ px_min = min([p_com(:,1); p_left(:,1); p_right(:,1)]);
 px_max = max([p_com(:,1); p_left(:,1); p_right(:,1)]);
 pz_min = min([p_com(:,2); p_left(:,2); p_right(:,2)]);
 pz_max = max([p_com(:,2); p_left(:,2); p_right(:,2)]);
-xlim([px_min-0.1, px_max+0.1]);
-ylim([min(0, pz_min)-0.1, pz_max+0.1]);
+xlim([px_min-0.25, px_max+0.25]);
+ylim([min(0, pz_min)-0.25, pz_max+0.25]);
 
 t  = t * (1/rt);
 pause(0.5);
