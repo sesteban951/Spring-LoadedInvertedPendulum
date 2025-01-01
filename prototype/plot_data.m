@@ -26,7 +26,7 @@ theta_left = x_left(:,3);
 theta_right = x_right(:,3);
 
 % animation params
-rt = 0.1; % realtime rate
+rt = 1.0; % realtime rate
 
 figure('Name', 'Animation');
 set(0, 'DefaultFigureRenderer', 'painters');
@@ -34,15 +34,18 @@ hold on;
 
 xline(0);
 yline(0);
+xlabel('$p_x$ [m]', 'Interpreter', 'latex');
+ylabel('$p_z$ [m]', 'Interpreter', 'latex');
 grid on; axis equal;
 px_min = min([p_com(:,1); p_left(:,1); p_right(:,1)]);
 px_max = max([p_com(:,1); p_left(:,1); p_right(:,1)]);
+pz_min = min([p_com(:,2); p_left(:,2); p_right(:,2)]);
 pz_max = max([p_com(:,2); p_left(:,2); p_right(:,2)]);
 xlim([px_min-0.1, px_max+0.1]);
-ylim([-0.1, pz_max+0.1]);
+ylim([min(0, pz_min)-0.1, pz_max+0.1]);
 
 t  = t * (1/rt);
-pause(1);
+pause(0.5);
 tic;
 ind = 1;
 while true
