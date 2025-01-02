@@ -44,7 +44,7 @@ class UniformDistribution:
 
 
 #######################################################################
-# DYNMICS
+# DYNAMICS
 #######################################################################
 
 class MDROM:
@@ -260,10 +260,23 @@ class MDROM:
             xt_com[:, i+1] = xk_com.reshape(4)
             xt_left[:, i+1] = x_left.reshape(4)
             xt_right[:, i+1] = x_right.reshape(4)
-            pt_left[:, i+1] = p_left.reshape(2)
-            pt_right[:, i+1] = p_right.reshape(2)
+            
             D[i+1] = Dk
             print(Dk)
+            
+            # TODO: make tihs cleaner
+            if Dk == 'F':
+                pt_left[:, i+1] = self.get_foot_state(xk_com, x_left, pz_zero=False).flatten()
+                pt_right[:, i+1] = self.get_foot_state(xk_com, x_right, pz_zero=False).flatten()
+            elif Dk == 'L':
+                pt_left[:, i+1] = p_left.reshape(2)
+                pt_right[:, i+1] = self.get_foot_state(xk_com, x_right, pz_zero=False).flatten()
+            elif Dk == 'R':
+                pt_left[:, i+1] = self.get_foot_state(xk_com, x_left, pz_zero=False).flatten()
+                pt_right[:, i+1] = p_right.reshape(2)
+            elif Dk == 'D':
+                pt_left[:, i+1] = p_left.reshape(2)
+                pt_right[:, i+1] = p_right.reshape(2)
 
         return Tx, xt_com, xt_left, xt_right, pt_left, pt_right, D
     
@@ -393,9 +406,9 @@ class MDROM:
             
             # pack into state vectors
             x_left = np.array([[r_L],
-                            [theta_L[0]],
-                            [rdot_L[0][0]],
-                            [thetadot_L[0]]])
+                              [theta_L[0]],
+                              [rdot_L[0][0]],
+                              [thetadot_L[0]]])
             x_right = np.array([[r_R],
                                 [theta_R[0]],
                                 [rdot_R[0][0]],
@@ -493,18 +506,18 @@ class MDROM:
         contact_prev_R = contacts_prev[1]
         contact_new_L = contacts_new[0]
         contact_new_R = contacts_new[1]
-        
+
         # Left leg update
-        if contact_new_L != contact_prev_L:
+        if contact_new_L == True:
             p_left = self.get_foot_state(x_com, x_left, pz_zero=True)
-        else:
+        elif contact_new_L == False:
             p_left = np.array([[None],
                                [None]])
 
         # Right leg update
-        if contact_new_R != contact_prev_R:
+        if contact_new_R == True:
             p_right = self.get_foot_state(x_com, x_right, pz_zero=True)
-        else:
+        elif contact_new_R == False:
             p_right = np.array([[None],
                                 [None]])
 
@@ -521,19 +534,16 @@ class MDROM:
         r = x_leg[0][0]
         theta = x_leg[1][0]
 
-        # foot position in COM frame 
-        px_foot_C = -r * np.sin(theta)
+        # foot position in world frame frame 
+        px_foot_W = p_com[0][0] - r * np.sin(theta)
         
         if pz_zero == True:
-            pz_foot_C = 0.0
+            pz_foot_W = 0.0
         else:
-            pz_foot_C = -r * np.cos(theta)
+            pz_foot_W = p_com[1][0] -r * np.cos(theta)
         
-        p_leg_C = np.array([[px_foot_C],
-                            [pz_foot_C]]).reshape(2, 1)
-        
-        # foot position in world frame
-        p_foot_W = p_com + p_leg_C
+        p_foot_W = np.array([[px_foot_W],
+                             [pz_foot_W]]).reshape(2, 1)
 
         return p_foot_W
     
@@ -595,7 +605,7 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=50, 
+    control_params = PredictiveControlParams(N=250, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
@@ -617,14 +627,14 @@ if __name__ == "__main__":
 
     # initial conditions
     x0_com = np.array([[0.25], # px [m]
-                       [1.75], # py [m]
-                       [1],  # vx [m/s]
-                       [1]]) # vz [m/s]
-    p_left = np.array([[None],  # px [m]
-                       [None]]) # py [m]
-    p_right = np.array([[None],  # px [m]
-                        [None]]) # py [m]
-    D0 = 'F'
+                       [0.5], # py [m]
+                       [2],  # vx [m/s]
+                       [5]]) # vz [m/s]
+    p_left = np.array([[0],  # px [m]
+                       [0]]) # py [m]
+    p_right = np.array([[0.5],  # px [m]
+                        [0]]) # py [m]
+    D0 = 'D'
 
     # random control inputs
     # U_r = np.random.uniform(distr_params.r_mean - distr_params.r_delta,
@@ -638,8 +648,8 @@ if __name__ == "__main__":
     # constant fixed control inputs
     u_constant = np.array([[system_params.l0 *1.0], # left leg
                            [system_params.l0*1.0], # right leg
-                           [np.pi/6],   # left leg
-                           [-np.pi/6]]) # right leg
+                           [np.pi/8],   # left leg
+                           [-np.pi/8]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation
