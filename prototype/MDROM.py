@@ -612,15 +612,15 @@ if __name__ == "__main__":
 
     # declare the uniform distribution
     # r_mean = np.ones(control_params.N-1) * system_params.l0
-    r_mean = system_params.l0
-    r_delta = 0.0
+    # r_mean = system_params.l0
+    # r_delta = 0.0
     # thtea_mean = np.ones(control_params.N-1) * 0.0
-    theta_mean = 0.0
-    theta_delta = 0.0
-    distr_params = UniformDistribution(r_mean = r_mean,
-                                       r_delta = r_delta,
-                                       theta_mean = theta_mean,
-                                       theta_delta = theta_delta)
+    # theta_mean = 0.0
+    # theta_delta = 0.0
+    # distr_params = UniformDistribution(r_mean = r_mean,
+    #                                    r_delta = r_delta,
+    #                                    theta_mean = theta_mean,
+    #                                    theta_delta = theta_delta)
 
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
@@ -628,8 +628,8 @@ if __name__ == "__main__":
     # initial conditions
     x0_com = np.array([[0.25], # px [m]
                        [0.5], # py [m]
-                       [2],  # vx [m/s]
-                       [5]]) # vz [m/s]
+                       [1],  # vx [m/s]
+                       [10]]) # vz [m/s]
     p_left = np.array([[0],  # px [m]
                        [0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
@@ -647,7 +647,7 @@ if __name__ == "__main__":
 
     # constant fixed control inputs
     u_constant = np.array([[system_params.l0 *1.0], # left leg
-                           [system_params.l0*1.0], # right leg
+                           [system_params.l0 * 1.0], # right leg
                            [np.pi/8],   # left leg
                            [-np.pi/8]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))

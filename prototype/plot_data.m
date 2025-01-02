@@ -20,14 +20,113 @@ p_com = x_com(:,1:2);
 v_com = x_com(:,3:4);
 
 % leg states
-r_left = x_left(:,1:2);
-r_right = x_right(:,1:2);
-theta_left = x_left(:,3);
-theta_right = x_right(:,3);
+q_left = x_left(:,1:2);
+q_right = x_right(:,1:2);
+v_left = x_left(:,3:4);
+v_right = x_right(:,3:4);
+
+% convert the domains to int
+domain_int = zeros(length(domain), 1);
+for i = 1:length(domain)
+    if domain(i) == 'F'
+        domain_int(i) = 0;
+    elseif domain(i) == 'L'
+        domain_int(i) = 1;
+    elseif domain(i) == 'R'
+        domain_int(i) = 2;
+    elseif domain(i) == 'D'
+        domain_int(i) = 3;
+    end
+end
 
 % animation params
-rt = 1.0; % realtime rate
-animate = true;
+rt = 0.5; % realtime rate
+plot_states = true;
+animate = false;
+
+if plot_states == true
+    % plot all states
+    figure('Name', 'COM States', 'WindowState', 'maximized');
+    set(0, 'DefaultFigureRenderer', 'painters');
+
+    subplot(3,4,1);
+    hold on; grid on;
+    plot(t, p_com(:,1), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$p_x$ [m]', 'Interpreter', 'latex');
+    title('x-pos');
+
+    subplot(3,4,2);
+    hold on; grid on;
+    plot(t, p_com(:,2), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$p_z$ [m]', 'Interpreter', 'latex');
+    title('z-pos');
+
+    subplot(3,4,5); 
+    hold on; grid on;
+    % vx_com = diff(p_com(:,1))./diff(t);
+    plot(t, v_com(:,1), 'LineWidth', 2);
+    % plot(t(1:end-1), vx_com, 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$v_x$ [m/s]', 'Interpreter', 'latex');
+    title('x-vel');
+
+    subplot(3,4,6);
+    hold on; grid on;
+    % vz_com = diff(p_com(:,2))./diff(t);
+    plot(t, v_com(:,2), 'LineWidth', 2);
+    % plot(t(1:end-1), vz_com, 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$v_z$ [m/s]', 'Interpreter', 'latex');
+    title('z-vel');
+
+    subplot(3,4,3);
+    hold on; grid on;
+    plot(t, q_left(:,1), 'LineWidth', 2);
+    plot(t, q_right(:,1), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$r$ [m]', 'Interpreter', 'latex');
+    legend('Left', 'Right');
+    title('Leg Length, r');
+
+    subplot(3,4,4);
+    hold on; grid on;
+    plot(t, q_left(:,2), 'LineWidth', 2);
+    plot(t, q_right(:,2), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$\theta$ [rad]', 'Interpreter', 'latex');
+    legend('Left', 'Right');
+    title('Leg Angle, theta');
+
+    subplot(3,4,7);
+    hold on; grid on;
+    plot(t, v_left(:,1), 'LineWidth', 2);
+    plot(t, v_right(:,1), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$\dot{r}$ [m/s]', 'Interpreter', 'latex');
+    legend('Left', 'Right');
+    title('Leg Length Rate, r-dot');
+
+    subplot(3,4,8);
+    hold on; grid on;
+    plot(t, v_left(:,2), 'LineWidth', 2);
+    plot(t, v_right(:,2), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$\dot{\theta}$ [rad/s]', 'Interpreter', 'latex');
+    legend('Left', 'Right');
+    title('Leg Angle Rate, theta-dot');
+ 
+    subplot(3,4,[9:12]);
+    hold on; grid on;
+    stairs(t, domain_int, 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('Domain');
+    title('Domain');
+    ylim([-0.5, 3.5]);
+    yticks([0, 1, 2, 3]);
+    yticklabels({'F', 'L', 'R', 'D'});
+end
 
 % animate the com trajectory
 if animate == true
