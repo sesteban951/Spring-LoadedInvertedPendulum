@@ -646,8 +646,8 @@ if __name__ == "__main__":
     # U = np.vstack((U_r, U_legs))
 
     # constant fixed control inputs
-    u_constant = np.array([[system_params.l0 *1.0], # left leg
-                           [system_params.l0 * 1.0], # right leg
+    u_constant = np.array([[system_params.l0 * 1.5], # left leg
+                           [system_params.l0 * 1.5], # right leg
                            [np.pi/8],   # left leg
                            [-np.pi/8]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
@@ -675,59 +675,3 @@ if __name__ == "__main__":
     np.savetxt('./data/pos_right.csv', p_right.T, delimiter=',')
     np.savetxt('./data/domain.csv', D, delimiter=',', fmt='%s')
 
-    # # plot the center of mass trajcetory
-    # plt.figure()
-
-    # # draw straight black line to represent the ground
-    # plt.plot([-1, 1], [0, 0], 'k-')
-
-    # plt.plot(x_com[0, :], x_com[1, :], label='x')
-    # plt.plot(x0_com[0], x0_com[1], 'go', label='x0')
-    # plt.plot(x_com[0, -1], x_com[1, -1], 'rx', label='xf')
-    # plt.xlabel('x [m]')
-    # plt.ylabel('y [m]')
-    # plt.grid()
-    # plt.axis('equal') 
-    # plt.legend()
-    # plt.show()
-
-    # # plot the leg states
-    # plt.figure()
-
-    # plt.subplot(2, 2, 1)
-    # plt.plot(t, x_left[0, :], label='left')
-    # plt.plot(t, x_right[0, :], label='right')
-    # plt.xlabel('time [s]')
-    # plt.ylabel('r [m]')
-    # plt.grid()
-    # plt.legend()
-
-    # plt.subplot(2, 2, 2)
-    # plt.plot(t, x_left[1, :], label='left')
-    # plt.plot(t, x_right[1, :], label='right')
-    # plt.xlabel('time [s]')
-    # plt.ylabel('theta [rad]')
-    # plt.grid()
-    # plt.legend()
-
-    # plt.subplot(2, 2, 3)
-    # plt.plot(t, x_left[2, :], label='left')
-    # plt.plot(t, x_right[2, :], label='right')
-    # plt.xlabel('time [s]')
-    # plt.ylabel('rdot [m/s]')
-    # plt.grid()
-    # plt.legend()
-
-    # plt.subplot(2, 2, 4)
-    # plt.plot(t, x_left[3, :], label='left')
-    # plt.plot(t, x_right[3, :], label='right')
-    # plt.xlabel('time [s]')
-    # plt.ylabel('thetadot [rad/s]')
-    # plt.grid()
-    # plt.legend()
-    
-    # plt.show()
-
-    # 805-994-8429
-    # Crystal 
-    # 25$

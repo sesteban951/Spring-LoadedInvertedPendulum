@@ -40,11 +40,11 @@ for i = 1:length(domain)
 end
 
 % animation params
-rt = 0.5; % realtime rate
-plot_states = true;
-animate = false;
+rt = 1.0; % realtime rate
+plot_states = 0;
+animate = 1;
 
-if plot_states == true
+if plot_states == 1
     % plot all states
     figure('Name', 'COM States', 'WindowState', 'maximized');
     set(0, 'DefaultFigureRenderer', 'painters');
@@ -129,7 +129,7 @@ if plot_states == true
 end
 
 % animate the com trajectory
-if animate == true
+if animate == 1
 
     figure('Name', 'Animation');
     set(0, 'DefaultFigureRenderer', 'painters');
