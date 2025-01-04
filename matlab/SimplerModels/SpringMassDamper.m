@@ -11,13 +11,14 @@ sys.g = 9.81;   % gravity
 sys.l0 = 0.65;  % nominal length
 
 % mpc parameters
-mpc.K = 750;              % number of rollouts
-mpc.N = 40;                % number of time steps
+mpc.K = 500;               % number of rollouts
+mpc.N = 50;                % number of time steps
 mpc.dt = 0.005;            % time step
 mpc.interp = 'L';          % interpolation type
-mpc.Q  = diag([6, 0.5]);  % state cost
-mpc.Qf = diag([7, 0.5]);  % state cost
-mpc.R = 0.;                % state cost
+mpc.Q  = diag([6, 0.05]);  % state cost
+mpc.Qf = diag([7, 0.05]);  % state cost
+mpc.R = 0.0;              % input cost
+mpc.Rr = 1e-3;              % input rate cost
 mpc.iters = 25;            % number of iterations
 mpc.n_elite = 10;          % number of elite rollouts
 
@@ -68,11 +69,11 @@ function [t, x, u] = cross_entropy_method(x0, Xdes, sys, mpc, distr)
         U_mean = mean(U_elite_matrix, 2);
         U_cov = cov(U_elite_matrix');
         diags_cov = diag(U_cov);
-        % for j = 1:length(diags_cov)
-        %     if diags_cov(j) < distr.cov_min
-        %         diags_cov(j) = distr.cov_min;
-        %     end
-        % end
+        for j = 1:length(diags_cov)
+            if diags_cov(j) < distr.cov_min
+                diags_cov(j) = distr.cov_min;
+            end
+        end
         U_cov = diag(diags_cov);
         % [~, S, ~] = svd(U_cov);
         % diags_S = diag(S);
@@ -166,9 +167,11 @@ function J = cost_function(x, u, Xdes, mpc)
     xN_des = Xdes(N, :)';
     terminal_cost = (xN - xN_des)' * mpc.Qf * (xN - xN_des);
 
-    % TODO: maybe try to put a cost on rate of change of the input
+    % Penalty on the rate of change of the input
+    U_rate = diff(u);
+    input_rate_cost = norm(U_rate)^2 * mpc.Rr;
     
-    J = state_cost + input_cost + terminal_cost;
+    J = state_cost + input_cost + terminal_cost + input_rate_cost;
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
