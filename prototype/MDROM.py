@@ -65,7 +65,9 @@ class MDROM:
         self.dt = control_params.dt
         self.N = control_params.N
         self.interp = control_params.interp
-        
+
+    #################################  DYNAMICS  #################################
+
     def dynamics(self, x_com, p_left, p_right, u, d):
         """
         Compute the dynamics, xdot = f(x, u)
@@ -178,6 +180,8 @@ class MDROM:
 
         return u
     
+    #################################  ROLLOUT  #################################
+
     # def RK3 integration scheme
     def RK3_rollout(self, x0_com, p_left, p_right, U, D0):
         """
@@ -209,7 +213,7 @@ class MDROM:
         # RK3 integration
         xk_com = x0_com
         Dk = D0
-        contacts = self.contact_identification(Dk)
+        contacts = self.contact_identification(D0)
         for i in range(0, N-1):
             # intermmidiate times
             tk = i * dt
@@ -239,18 +243,18 @@ class MDROM:
                                u3, 
                                Dk)
 
-            # take the step and update all states
+            # RK3 step and update all states
             xk_com = xk_com + (dt/6) * (f1 + 4*f2 + f3)
-            x_left, x_right = self.update_leg_state(xk_com, p_left, p_right, u1, Dk)
+            xk_left, xk_right = self.update_leg_state(xk_com, p_left, p_right, u1, Dk)
 
             # check if hit switching surfaces and update state needed
-            checked_contacts = self.check_switching(xk_com, x_left, x_right, contacts)
+            checked_contacts = self.check_switching(xk_com, xk_left, xk_right, contacts)
             
             # if a change in contact detected
             if checked_contacts != contacts:
                 
                 # update the feet positions
-                p_left, p_right = self.apply_reset(xk_com, x_left, x_right, contacts, checked_contacts)
+                p_left, p_right = self.apply_reset(xk_com, xk_left, xk_right, checked_contacts)
                 
                 # update domain and contact info
                 Dk = self.domain_identification(checked_contacts)
@@ -258,21 +262,21 @@ class MDROM:
 
             # store the states
             xt_com[:, i+1] = xk_com.reshape(4)
-            xt_left[:, i+1] = x_left.reshape(4)
-            xt_right[:, i+1] = x_right.reshape(4)
+            xt_left[:, i+1] = xk_left.reshape(4)
+            xt_right[:, i+1] = xk_right.reshape(4)
             
             D[i+1] = Dk
             print(Dk)
             
             # TODO: make tihs cleaner
             if Dk == 'F':
-                pt_left[:, i+1] = self.get_foot_state(xk_com, x_left, pz_zero=False).flatten()
-                pt_right[:, i+1] = self.get_foot_state(xk_com, x_right, pz_zero=False).flatten()
+                pt_left[:, i+1] = self.get_foot_state(xk_com, xk_left, pz_zero=False).flatten()
+                pt_right[:, i+1] = self.get_foot_state(xk_com, xk_right, pz_zero=False).flatten()
             elif Dk == 'L':
                 pt_left[:, i+1] = p_left.reshape(2)
-                pt_right[:, i+1] = self.get_foot_state(xk_com, x_right, pz_zero=False).flatten()
+                pt_right[:, i+1] = self.get_foot_state(xk_com, xk_right, pz_zero=False).flatten()
             elif Dk == 'R':
-                pt_left[:, i+1] = self.get_foot_state(xk_com, x_left, pz_zero=False).flatten()
+                pt_left[:, i+1] = self.get_foot_state(xk_com, xk_left, pz_zero=False).flatten()
                 pt_right[:, i+1] = p_right.reshape(2)
             elif Dk == 'D':
                 pt_left[:, i+1] = p_left.reshape(2)
@@ -280,6 +284,8 @@ class MDROM:
 
         return Tx, xt_com, xt_left, xt_right, pt_left, pt_right, D
     
+    #################################  STATE UPDATES  #################################
+
     # update leg polar state
     def update_leg_state(self, x_com, p_left, p_right, u, D):
         """
@@ -416,6 +422,32 @@ class MDROM:
             
         return x_left, x_right
 
+    # compute foot position and veclocity in world
+    def get_foot_state(self, x_com, x_leg, pz_zero):
+
+        # unpack the states
+        p_com = np.array([[x_com[0]],
+                          [x_com[1]]]).reshape(2, 1)
+        
+        # get the leg state
+        r = x_leg[0][0]
+        theta = x_leg[1][0]
+
+        # foot position in world frame frame 
+        px_foot_W = p_com[0][0] - r * np.sin(theta)
+        
+        if pz_zero == True:
+            pz_foot_W = 0.0
+        else:
+            pz_foot_W = p_com[1][0] -r * np.cos(theta)
+        
+        p_foot_W = np.array([[px_foot_W],
+                             [pz_foot_W]]).reshape(2, 1)
+
+        return p_foot_W
+
+    #################################  SWITCHING  #################################
+
     # check switching surfaces
     def check_switching(self, x_com, x_left, x_right, contacts):
         """
@@ -487,7 +519,7 @@ class MDROM:
 
         # check the switching surface conditions
         # set by input
-        nom_length = (r >= self.l0 * 2.0)      # the leg is at its nominal uncompressed length # TODO: change based on inp
+        nom_length = (r >= self.l0 * 1.0)      # the leg is at its nominal uncompressed length # TODO: change based on inp
         pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel # if true, leg has taken off into flight
 
@@ -500,11 +532,9 @@ class MDROM:
         return contact
 
     # apply a reset map
-    def apply_reset(self, x_com, x_left, x_right, contacts_prev, contacts_new):
+    def apply_reset(self, x_com, x_left, x_right, contacts_new):
 
         # unapck the contact values
-        contact_prev_L = contacts_prev[0]
-        contact_prev_R = contacts_prev[1]
         contact_new_L = contacts_new[0]
         contact_new_R = contacts_new[1]
 
@@ -523,30 +553,8 @@ class MDROM:
                                 [None]])
 
         return p_left, p_right
-    
-    # compute foot position and veclocity in world
-    def get_foot_state(self, x_com, x_leg, pz_zero):
 
-        # unpack the states
-        p_com = np.array([[x_com[0]],
-                          [x_com[1]]]).reshape(2, 1)
-        
-        # get the leg state
-        r = x_leg[0][0]
-        theta = x_leg[1][0]
-
-        # foot position in world frame frame 
-        px_foot_W = p_com[0][0] - r * np.sin(theta)
-        
-        if pz_zero == True:
-            pz_foot_W = 0.0
-        else:
-            pz_foot_W = p_com[1][0] -r * np.cos(theta)
-        
-        p_foot_W = np.array([[px_foot_W],
-                             [pz_foot_W]]).reshape(2, 1)
-
-        return p_foot_W
+    #################################  DOMAIN/CONTACT MAPPING  #################################
     
     # Domain mapping function
     def domain_identification(self, contacts):
@@ -630,7 +638,7 @@ if __name__ == "__main__":
     x0_com = np.array([[0.25], # px [m]
                        [0.5], # py [m]
                        [1],  # vx [m/s]
-                       [7]]) # vz [m/s]
+                       [4]]) # vz [m/s]
     p_left = np.array([[0],  # px [m]
                        [0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
@@ -649,8 +657,8 @@ if __name__ == "__main__":
     # constant fixed control inputs
     u_constant = np.array([[system_params.l0 * 1.0], # left leg
                            [system_params.l0 * 1.0], # right leg
-                           [np.pi/4],   # left leg
-                           [-np.pi/4]]) # right leg
+                           [np.pi/8],   # left leg
+                           [-np.pi/8]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation

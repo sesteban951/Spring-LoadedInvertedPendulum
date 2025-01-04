@@ -40,9 +40,10 @@ for i = 1:length(domain)
 end
 
 % animation params
-rt = 0.25; % realtime rate
+rt = 0.75; % realtime rate
 plot_states = 0;
 animate = 1;
+replays = 3;
 
 if plot_states == 1
     % plot all states
@@ -148,71 +149,91 @@ if animate == 1
     ylim([min(0, pz_min)-0.25, pz_max+0.25]);
     
     t  = t * (1/rt);
-    pause(0.5);
-    tic;
-    ind = 1;
-    while true
+   
+    for i = 1:replays
+        pause(0.25);
+        tic;
+        ind = 1;
+        com_pts = [];
+        left_foot_pts = [];
+        right_foot_pts = [];
+        while true
 
-        % get COM position 
-        px = p_com(ind,1);
-        pz = p_com(ind,2);
+            % get COM position 
+            px = p_com(ind,1);
+            pz = p_com(ind,2);
 
-        % draw the legs
-        d = domain(ind,:);
-        if d ~= 'F'
-            if d == 'L'
-                px_left = p_left(ind,1);
-                pz_left = p_left(ind,2);
-                
-                left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 2);
-                left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 5, 'MarkerFaceColor', 'b');
-                right_leg = plot(NaN, NaN);
-            elseif d == 'R'
-                px_right = p_right(ind,1);
-                pz_right = p_right(ind,2);
-                
+            % draw the legs
+            d = domain(ind,:);
+            if d ~= 'F'
+                if d == 'L'
+                    px_left = p_left(ind,1);
+                    pz_left = p_left(ind,2);
+                    
+                    left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 2);
+                    left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 5, 'MarkerFaceColor', 'b');
+                    right_leg = plot(NaN, NaN);
+                elseif d == 'R'
+                    px_right = p_right(ind,1);
+                    pz_right = p_right(ind,2);
+                    
+                    left_leg = plot(NaN, NaN);
+                    right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 2);
+                    right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
+                elseif d == 'D'
+                    px_left = p_left(ind,1);
+                    pz_left = p_left(ind,2);
+                    px_right = p_right(ind,1);
+                    pz_right = p_right(ind,2);
+
+                    left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 2);
+                    right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 2);
+                    left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 5, 'MarkerFaceColor', 'b');
+                    right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
+                end
+            else
                 left_leg = plot(NaN, NaN);
-                right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 2);
-                right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
-            elseif d == 'D'
-                px_left = p_left(ind,1);
-                pz_left = p_left(ind,2);
-                px_right = p_right(ind,1);
-                pz_right = p_right(ind,2);
-
-                left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 2);
-                right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 2);
-                left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 5, 'MarkerFaceColor', 'b');
-                right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
+                right_leg = plot(NaN, NaN);
             end
-        else
-            left_leg = plot(NaN, NaN);
-            right_leg = plot(NaN, NaN);
-        end
 
-        % draw the mass
-        mass = plot(px, pz, 'ko', 'MarkerSize', 25, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
-        pt_pos = plot(px, pz, 'k.', 'MarkerSize', 5);
+            left_foot_pts = [left_foot_pts; left_foot];
+            right_foot_pts = [right_foot_pts; right_foot];
 
-        drawnow;
-        
-        % title
-        msg = sprintf('Time: %0.3f [sec]', t(ind) * rt);
-        title(msg);
-        
-        % wait until the next time step
-        while toc< t(ind+1)
-            % wait
+            % draw the mass
+            mass = plot(px, pz, 'ko', 'MarkerSize', 25, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
+            pt_pos = plot(px, pz, 'k.', 'MarkerSize', 5);
+            com_pts = [com_pts; pt_pos];
+
+            drawnow;
+            
+            % title
+            msg = sprintf('Time: %0.3f [sec]', t(ind) * rt);
+            title(msg);
+            
+            % wait until the next time step
+            while toc< t(ind+1)
+                % wait
+            end
+            
+            % increment the index
+            if ind+1 >= length(t)
+                break;
+            else
+                ind = ind + 1;
+                delete(mass);
+                delete(left_leg);
+                delete(right_leg);
+            end
         end
-        
-        % increment the index
-        if ind+1 >= length(t)
-            break;
-        else
-            ind = ind + 1;
+        if i < replays
             delete(mass);
             delete(left_leg);
             delete(right_leg);
+            for j = 1:length(com_pts)
+                delete(com_pts(j));
+                delete(left_foot_pts(j));
+                delete(right_foot_pts(j));
+            end
         end
     end
 end
