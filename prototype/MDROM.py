@@ -454,11 +454,11 @@ class MDROM:
         # get relevant states
         pz = x_com[1]
         vz = x_com[3]
-        r = x_leg[0]
-        theta = x_leg[1]
-        rdot = x_leg[2]
-        thetadot = x_leg[3]
-
+        r = x_leg[0]         # set by input
+        theta = x_leg[1]     # set by input
+        rdot = x_leg[2]      # set by input
+        thetadot = x_leg[3]  # set by input
+ 
         # compute the foot position and velocity
         pz_foot = pz - r * np.cos(theta)
         vz_foot = vz - rdot * np.cos(theta) + r * thetadot * np.sin(theta)
@@ -486,7 +486,8 @@ class MDROM:
         rdot = x_leg[2]
 
         # check the switching surface conditions
-        nom_length = (r >= self.l0)      # the leg is at its nominal uncompressed length
+        # set by input
+        nom_length = (r >= self.l0 * 2.0)      # the leg is at its nominal uncompressed length # TODO: change based on inp
         pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel # if true, leg has taken off into flight
 
@@ -629,7 +630,7 @@ if __name__ == "__main__":
     x0_com = np.array([[0.25], # px [m]
                        [0.5], # py [m]
                        [1],  # vx [m/s]
-                       [10]]) # vz [m/s]
+                       [7]]) # vz [m/s]
     p_left = np.array([[0],  # px [m]
                        [0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
@@ -646,10 +647,10 @@ if __name__ == "__main__":
     # U = np.vstack((U_r, U_legs))
 
     # constant fixed control inputs
-    u_constant = np.array([[system_params.l0 * 1.5], # left leg
-                           [system_params.l0 * 1.5], # right leg
-                           [np.pi/8],   # left leg
-                           [-np.pi/8]]) # right leg
+    u_constant = np.array([[system_params.l0 * 1.0], # left leg
+                           [system_params.l0 * 1.0], # right leg
+                           [np.pi/4],   # left leg
+                           [-np.pi/4]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation

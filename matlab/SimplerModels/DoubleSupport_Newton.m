@@ -7,7 +7,7 @@ clear all; close all; clc;
 params.m = 35.0;   % mass 
 params.g = 9.81;   % gravity
 params.l0 = 0.65;   % free length of the leg
-params.k = 5000;  % spring constant
+params.k = 8000;  % spring constant
 params.b = 50.0;    % damping coefficient
 params.p1 = [0; 0]; % left leg position
 params.p2 = [0.5; 0]; % right leg position

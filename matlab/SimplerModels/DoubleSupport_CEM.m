@@ -20,8 +20,8 @@ spc.Q = diag([30, 30, 0.1, 0.1]); % state cost
 spc.R = diag([0., 0.]);           % control cost
 spc.Qf = diag([50, 50, 1, 1]);    % final state cost
 spc.n_elite = 10;      % number of elite rollouts to consider
-spc.n_iters = 15;      % number of CE-M iterations
-spc.cov_scaling = 2.0; % scaling factor for the covariance to not collapse too fast
+spc.n_iters = 12;      % number of CE-M iterations
+spc.cov_scaling = 1.0; % scaling factor for the covariance to not collapse too fast
 
 % initial distribution parameters
 distr.type = 'G'; % distribution type to use, 'G' (gaussian) or 'U' (uniform)
@@ -36,13 +36,13 @@ plot_pdf = 1;
 
 % intial conditions
 x0 = [0.25;    % px
-      0.7; % pz
+      0.3; % pz
       0;   % vx
       0];  % vz
 
 % desired state
 x_des = [0.25; 
-         0.3; 
+         0.7; 
          0; 
          0];
 
@@ -117,6 +117,7 @@ if animate == 1
     xlim([px_min-1.5, px_max+1.5]);
     ylim([pz_min-1.5, pz_max+1.5]);
 
+    pause(2);
     tic;
     ind = 1;
     t = t * (1/rt);

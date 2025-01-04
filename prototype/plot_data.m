@@ -40,7 +40,7 @@ for i = 1:length(domain)
 end
 
 % animation params
-rt = 1.0; % realtime rate
+rt = 0.25; % realtime rate
 plot_states = 0;
 animate = 1;
 

@@ -11,38 +11,39 @@ sys.g = 9.81;   % gravity
 sys.l0 = 0.65;  % nominal length
 
 % mpc parameters
-mpc.K = 500;              % number of rollouts
-mpc.N = 50;               % number of time steps
-mpc.dt = 0.01;            % time step
-mpc.interp = 'L';         % interpolation type
-mpc.Q  = diag([2, 0.05]); % state cost
-mpc.Qf = diag([2, 0.05]);  % state cost
-mpc.R = 0.0;              % state cost
-mpc.iters = 10;           % number of iterations
-mpc.n_elite = 3;          % number of elite rollouts
+mpc.K = 750;              % number of rollouts
+mpc.N = 40;                % number of time steps
+mpc.dt = 0.005;            % time step
+mpc.interp = 'L';          % interpolation type
+mpc.Q  = diag([6, 0.5]);  % state cost
+mpc.Qf = diag([7, 0.5]);  % state cost
+mpc.R = 0.;                % state cost
+mpc.iters = 25;            % number of iterations
+mpc.n_elite = 10;          % number of elite rollouts
 
 % distribution struct
-distr.mu = sys.l0 * ones(mpc.N-1, 1);           % mean
+distr.mu = 0.45 * ones(mpc.N-1, 1);             % mean
+distr.u_max = 1.0;                               % maximum input
+distr.u_min = 0.1;                               % minimum input
 sigma = 1.0;                                    % standard deviation
 distr.Sigma = diag(sigma^2 * ones(mpc.N-1, 1)); % covariance
-distr.cov_scaling = 1.0;                        % scaling factor for the covariance
+distr.cov_min = 0.1;                            % keep the diagonals above this value
 
 % simulation parameters
-rt = 1.0; % real time rate
+rt = 0.1; % real time rate
+n_replays = 3;
 
 % initial conditions
-x0 = [0.4;    % inital position 
+x0 = [0.2;    % inital position 
       0.0];   % initial velocity
-xdes = [0.8; % desired position
+xdes = [0.7; % desired position
         0.0]; % desired velocity
 Xdes = generate_reference(x0, xdes, mpc);
-
-size(Xdes)
 
 % simulate the system 
 [t, x, u] = cross_entropy_method(x0, Xdes, sys, mpc, distr);
 
-animate(t, x, Xdes, u);
+animate(t, x, Xdes, u, mpc, rt, n_replays);
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % ROLLOUTS
@@ -65,7 +66,22 @@ function [t, x, u] = cross_entropy_method(x0, Xdes, sys, mpc, distr)
 
         % update the distribution
         U_mean = mean(U_elite_matrix, 2);
-        U_cov = distr.cov_scaling * cov(U_elite_matrix');
+        U_cov = cov(U_elite_matrix');
+        diags_cov = diag(U_cov);
+        % for j = 1:length(diags_cov)
+        %     if diags_cov(j) < distr.cov_min
+        %         diags_cov(j) = distr.cov_min;
+        %     end
+        % end
+        U_cov = diag(diags_cov);
+        % [~, S, ~] = svd(U_cov);
+        % diags_S = diag(S);
+        % for j = 1:length(diags_S)
+        %     if diags_S(j) < distr.cov_min
+        %         diags_S(j) = distr.cov_min;
+        %     end
+        % end
+        % U_cov = diag(diags_S);
 
         % update the distribution
         distr.mu = U_mean;
@@ -149,6 +165,8 @@ function J = cost_function(x, u, Xdes, mpc)
     xN = x(N, :)';
     xN_des = Xdes(N, :)';
     terminal_cost = (xN - xN_des)' * mpc.Qf * (xN - xN_des);
+
+    % TODO: maybe try to put a cost on rate of change of the input
     
     J = state_cost + input_cost + terminal_cost;
 end
@@ -188,6 +206,10 @@ function U = sample_input(mpc, distr)
     % sample a gaussian disitrbution
     U = mvnrnd(distr.mu, distr.Sigma)';
 
+    % clip the values
+    for i = 1:length(U)
+        U(i) = max(min(U(i), distr.u_max), distr.u_min);
+    end
 end
 
 % get the piecewise constant control action
@@ -232,7 +254,7 @@ end
 % ANIMATION
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-function animate(t, x, xdes, u)
+function animate(t, x, xdes, u, mpc, rt, n_replays)
 
     % plot the results
     figure('Name', 'Spring-Mass-Damper Simulation');
@@ -252,8 +274,11 @@ function animate(t, x, xdes, u)
     grid on;
 
     subplot(3, 2, 5);
-    stairs(t(1:end-1), u, 'LineWidth', 2);
-    xlabel('Time [s]');
+    if mpc.interp == 'L'
+        plot(t(1:end-1), u, 'LineWidth', 2);
+    elseif mpc.interp == 'Z'
+        stairs(t(1:end-1), u, 'LineWidth', 2);
+    end
     ylabel('Free Length, l0 [m]');
     grid on;
 
@@ -262,36 +287,54 @@ function animate(t, x, xdes, u)
     yline(0); 
     ylabel('Position [m]');
     axis equal; grid on;
+    z_max = max(x(:, 1));
+    z_min = min(x(:, 1));
+    xlim([-0.3, 0.3]);
+    ylim([min(z_min, 0)-0.1, max(z_max, 0)+0.1]);
 
-    tic;
-    ind = 1;
-    while 1==1
+    t = t * (1/rt);
+    
+    for i = 1:n_replays
 
-        % draw the goal
-        x_goal = xdes(ind, 1);
-        x_goal_line = yline(x_goal, 'k--', 'desired');
+        % play the animation
+        pause(0.25);
+        tic;
+        ind = 1;
+        while 1==1
 
-        % draw the mass spring damper system
-        pole = plot([0, 0], [0, x(ind, 1)], 'k', 'LineWidth', 2);
-        box_center = [0; x(ind, 1)];
-        box = rectangle('Position', [box_center(1)-0.1, box_center(2)-0.1, 0.2, 0.2], 'Curvature', 0.1, 'FaceColor', 'r');
-        
-        drawnow;
+            % draw the goal
+            x_goal = xdes(ind, 1);
+            x_goal_line = yline(x_goal, 'k--', 'desired');
 
-        % put the time in the title
-        msg = sprintf('Time: %.2f sec', t(ind));
-        title(msg);
+            % draw the mass spring damper system
+            pole = plot([0, 0], [0, x(ind, 1)], 'k', 'LineWidth', 2);
+            box_center = [0; x(ind, 1)];
+            box = rectangle('Position', [box_center(1)-0.1, box_center(2)-0.1, 0.2, 0.2], 'Curvature', 0.1, 'FaceColor', 'r');
+            
+            drawnow;
 
-        % wait until the next time step
-        while toc < t(ind+1)
-            % end
+            % put the time in the title
+            msg = sprintf('Time: %.2f sec', t(ind) * rt);
+            title(msg);
+
+            % wait until the next time step
+            while toc < t(ind+1)
+                % end
+            end
+
+            % increment the index
+            if ind+1 >= length(t)
+                break;
+            else
+                ind = ind + 1;
+                delete(x_goal_line);
+                delete(pole);
+                delete(box);
+            end
         end
 
-        % increment the index
-        if ind+1 >= length(t)
-            break;
-        else
-            ind = ind + 1;
+        % delete the residual stuff
+        if i < n_replays
             delete(x_goal_line);
             delete(pole);
             delete(box);
