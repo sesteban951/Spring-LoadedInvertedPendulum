@@ -15,10 +15,10 @@ mpc.K = 500;               % number of rollouts
 mpc.N = 50;                % number of time steps
 mpc.dt = 0.005;            % time step
 mpc.interp = 'L';          % interpolation type
-mpc.Q  = diag([6, 0.05]);  % state cost
+mpc.Q  = diag([6, 0.02]);  % state cost
 mpc.Qf = diag([7, 0.05]);  % state cost
-mpc.R = 0.0;              % input cost
-mpc.Rr = 1e-3;              % input rate cost
+mpc.R = 0.0;               % input cost
+mpc.Rr = 0e-5;             % input rate cost
 mpc.iters = 25;            % number of iterations
 mpc.n_elite = 10;          % number of elite rollouts
 
@@ -246,11 +246,21 @@ end
 % generate the reference trajectory
 function Xdes = generate_reference(x0, xdes, mpc)
 
-    % do linear interpolation as the reference
+    % linear interpolation as the reference
     Xdes(:, 1) = linspace(x0(1), xdes(1), mpc.N);
 
     v_const = (xdes(1) - x0(1)) / (mpc.dt * mpc.N);
     Xdes(:, 2) = v_const * ones(mpc.N, 1);
+
+    % sine wave as the reference
+    T = (mpc.N-1) * mpc.dt;
+    f = 1/T;
+    omega  = 2*pi*f;
+    A = 0.1;
+    p = -A * sin(omega * (0:mpc.dt:T));
+    pdot = -A * omega * cos(omega * (0:mpc.dt:T));
+    Xdes(:, 1) = Xdes(:, 1) + p';
+    Xdes(:, 2) = Xdes(:, 2) + pdot';
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
