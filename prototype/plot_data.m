@@ -164,43 +164,21 @@ if animate == 1
             pz = p_com(ind,2);
 
             % draw the legs
-            d = domain(ind,:);
-            if d ~= 'F'
-                if d == 'L'
-                    px_left = p_left(ind,1);
-                    pz_left = p_left(ind,2);
-                    
-                    left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 2);
-                    left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 5, 'MarkerFaceColor', 'b');
-                    right_leg = plot(NaN, NaN);
-                elseif d == 'R'
-                    px_right = p_right(ind,1);
-                    pz_right = p_right(ind,2);
-                    
-                    left_leg = plot(NaN, NaN);
-                    right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 2);
-                    right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
-                elseif d == 'D'
-                    px_left = p_left(ind,1);
-                    pz_left = p_left(ind,2);
-                    px_right = p_right(ind,1);
-                    pz_right = p_right(ind,2);
+            px_left = p_left(ind,1);
+            pz_left = p_left(ind,2);
+            px_right = p_right(ind,1);
+            pz_right = p_right(ind,2);
 
-                    left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 2);
-                    right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 2);
-                    left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 5, 'MarkerFaceColor', 'b');
-                    right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 5, 'MarkerFaceColor', 'r');
-                end
-            else
-                left_leg = plot(NaN, NaN);
-                right_leg = plot(NaN, NaN);
-            end
+            left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 3);
+            right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 3);
+            left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
+            right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 1, 'MarkerFaceColor', 'r');
 
             left_foot_pts = [left_foot_pts; left_foot];
             right_foot_pts = [right_foot_pts; right_foot];
 
             % draw the mass
-            mass = plot(px, pz, 'ko', 'MarkerSize', 25, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
+            mass = plot(px, pz, 'ko', 'MarkerSize', 30, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
             pt_pos = plot(px, pz, 'k.', 'MarkerSize', 5);
             com_pts = [com_pts; pt_pos];
 
@@ -225,6 +203,8 @@ if animate == 1
                 delete(right_leg);
             end
         end
+
+        % clean the plot if still replaying
         if i < replays
             delete(mass);
             delete(left_leg);

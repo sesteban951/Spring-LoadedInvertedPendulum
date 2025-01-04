@@ -42,7 +42,6 @@ class UniformDistribution:
     theta_mean: np.array # revolute leg center [rad]
     theta_delta: float   # revolute leg delta range [rad]
 
-
 #######################################################################
 # DYNAMICS
 #######################################################################
@@ -248,7 +247,7 @@ class MDROM:
             xk_left, xk_right = self.update_leg_state(xk_com, p_left, p_right, u1, Dk)
 
             # check if hit switching surfaces and update state needed
-            checked_contacts = self.check_switching(xk_com, xk_left, xk_right, contacts)
+            checked_contacts = self.check_switching(xk_com, xk_left, xk_right, u1, contacts)
             
             # if a change in contact detected
             if checked_contacts != contacts:
@@ -265,22 +264,22 @@ class MDROM:
             xt_left[:, i+1] = xk_left.reshape(4)
             xt_right[:, i+1] = xk_right.reshape(4)
             
-            D[i+1] = Dk
-            print(Dk)
-            
-            # TODO: make tihs cleaner
+            # store the foot positions
             if Dk == 'F':
-                pt_left[:, i+1] = self.get_foot_state(xk_com, xk_left, pz_zero=False).flatten()
-                pt_right[:, i+1] = self.get_foot_state(xk_com, xk_right, pz_zero=False).flatten()
+                pt_left[:, i+1] = self.get_foot_pos(xk_com, xk_left, pz_zero=False).flatten()
+                pt_right[:, i+1] = self.get_foot_pos(xk_com, xk_right, pz_zero=False).flatten()
             elif Dk == 'L':
                 pt_left[:, i+1] = p_left.reshape(2)
-                pt_right[:, i+1] = self.get_foot_state(xk_com, xk_right, pz_zero=False).flatten()
+                pt_right[:, i+1] = self.get_foot_pos(xk_com, xk_right, pz_zero=False).flatten()
             elif Dk == 'R':
-                pt_left[:, i+1] = self.get_foot_state(xk_com, xk_left, pz_zero=False).flatten()
+                pt_left[:, i+1] = self.get_foot_pos(xk_com, xk_left, pz_zero=False).flatten()
                 pt_right[:, i+1] = p_right.reshape(2)
             elif Dk == 'D':
                 pt_left[:, i+1] = p_left.reshape(2)
                 pt_right[:, i+1] = p_right.reshape(2)
+
+            # store the domain
+            D[i+1] = Dk
 
         return Tx, xt_com, xt_left, xt_right, pt_left, pt_right, D
     
@@ -423,7 +422,7 @@ class MDROM:
         return x_left, x_right
 
     # compute foot position and veclocity in world
-    def get_foot_state(self, x_com, x_leg, pz_zero):
+    def get_foot_pos(self, x_com, x_leg, pz_zero):
 
         # unpack the states
         p_com = np.array([[x_com[0]],
@@ -449,7 +448,7 @@ class MDROM:
     #################################  SWITCHING  #################################
 
     # check switching surfaces
-    def check_switching(self, x_com, x_left, x_right, contacts):
+    def check_switching(self, x_com, x_left, x_right, u, contacts):
         """
         Check if the state has hit any switching surfaces
         """
@@ -463,7 +462,8 @@ class MDROM:
             contact_result_L = self.S_TD(x_com, x_left)
         elif contact_L == True:
             # check for takeoff
-            contact_result_L = self.S_TO(x_com, x_left)
+            u_leg = u[0]
+            contact_result_L = self.S_TO(x_com, x_left, u_leg)
 
         # Right Leg
         if contact_R == False:
@@ -471,7 +471,8 @@ class MDROM:
             contact_result_R = self.S_TD(x_com, x_right)
         elif contact_R == True:
             # check for takeoff
-            contact_result_R = self.S_TO(x_com, x_right)
+            u_leg = u[1]
+            contact_result_R = self.S_TO(x_com, x_right, u_leg)
 
         # update the contact values
         contacts = [contact_result_L, contact_result_R]
@@ -509,7 +510,7 @@ class MDROM:
         return contact
 
     # Take-Off (TO) Switching Surface -- checks individual legs
-    def S_TO(self, x_com, x_leg):
+    def S_TO(self, x_com, x_leg, u_leg):
         """
         Check if a leg has taken off from the ground
         """
@@ -519,7 +520,7 @@ class MDROM:
 
         # check the switching surface conditions
         # set by input
-        nom_length = (r >= self.l0 * 1.0)      # the leg is at its nominal uncompressed length # TODO: change based on inp
+        nom_length = (r >= u_leg)      # the leg is at its nominal uncompressed length # TODO: change based on inp
         pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel # if true, leg has taken off into flight
 
@@ -540,14 +541,14 @@ class MDROM:
 
         # Left leg update
         if contact_new_L == True:
-            p_left = self.get_foot_state(x_com, x_left, pz_zero=True)
+            p_left = self.get_foot_pos(x_com, x_left, pz_zero=True)
         elif contact_new_L == False:
             p_left = np.array([[None],
                                [None]])
 
         # Right leg update
         if contact_new_R == True:
-            p_right = self.get_foot_state(x_com, x_right, pz_zero=True)
+            p_right = self.get_foot_pos(x_com, x_right, pz_zero=True)
         elif contact_new_R == False:
             p_right = np.array([[None],
                                 [None]])
@@ -638,7 +639,7 @@ if __name__ == "__main__":
     x0_com = np.array([[0.25], # px [m]
                        [0.5], # py [m]
                        [1],  # vx [m/s]
-                       [4]]) # vz [m/s]
+                       [7]]) # vz [m/s]
     p_left = np.array([[0],  # px [m]
                        [0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
