@@ -615,10 +615,10 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=250, 
+    control_params = PredictiveControlParams(N=150, 
                                              dt=0.01, 
                                              K=100,
-                                             interp='Z')
+                                             interp='L')
 
     # declare the uniform distribution
     # r_mean = np.ones(control_params.N-1) * system_params.l0
@@ -637,16 +637,34 @@ if __name__ == "__main__":
 
     # initial conditions
     x0_com = np.array([[0.25], # px [m]
-                       [0.5], # py [m]
-                       [1],  # vx [m/s]
-                       [7]]) # vz [m/s]
+                       [0.50], # py [m]
+                       [3],  # vx [m/s]
+                       [0]]) # vz [m/s]
     p_left = np.array([[0],  # px [m]
                        [0]]) # py [m]
     p_right = np.array([[0.5],  # px [m]
                         [0]]) # py [m]
     D0 = 'D'
 
-    # random control inputs
+    # CONSTANT INPUT
+    # u_constant = np.array([[system_params.l0 * 1.0], # left leg
+    #                        [system_params.l0 * 1.0], # right leg
+    #                        [np.pi/8],   # left leg
+    #                        [-np.pi/8]]) # right leg
+    # U = np.tile(u_constant, (1, control_params.N-1))
+
+    # SPLINE INPUT
+    f = 2.0
+    omega = 2*np.pi*f
+    A = 0.2
+    u_left = A * np.sin(omega * np.arange(0, control_params.N-1) * control_params.dt)  + system_params.l0
+    u_right = A * np.sin(omega * np.arange(0, control_params.N-1) * control_params.dt) + system_params.l0
+    u_theta_left = np.ones(control_params.N-1) * np.pi/8
+    u_theta_right = np.ones(control_params.N-1) * -np.pi/8
+    U = np.vstack((u_left, u_right, u_theta_left, u_theta_right))
+    # print(U.shape)  
+
+    # RANDOM INPUT
     # U_r = np.random.uniform(distr_params.r_mean - distr_params.r_delta,
     #                         distr_params.r_mean + distr_params.r_delta,
     #                         (2, control_params.N-1))
@@ -655,26 +673,19 @@ if __name__ == "__main__":
     #                            (2, control_params.N-1))
     # U = np.vstack((U_r, U_legs))
 
-    # constant fixed control inputs
-    u_constant = np.array([[system_params.l0 * 1.0], # left leg
-                           [system_params.l0 * 1.0], # right leg
-                           [np.pi/8],   # left leg
-                           [-np.pi/8]]) # right leg
-    U = np.tile(u_constant, (1, control_params.N-1))
-
     # run the simulation
     t0 = time.time()
     t, x_com, x_left, x_right, p_left, p_right, D = mdrom.RK3_rollout(x0_com, p_left, p_right, U, D0)
     tf = time.time()
     print('Simulation time: ', tf - t0)
 
-    print(t.shape)
-    print(x_com.shape)
-    print(x_left.shape)
-    print(x_right.shape)
-    print(p_left.shape)
-    print(p_right.shape)
-    print(len(D))
+    # print(t.shape)
+    # print(x_com.shape)
+    # print(x_left.shape)
+    # print(x_right.shape)
+    # print(p_left.shape)
+    # print(p_right.shape)
+    # print(len(D))
 
     # save the data into CSV files
     np.savetxt('./data/time.csv', t, delimiter=',')

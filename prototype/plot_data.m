@@ -39,11 +39,13 @@ for i = 1:length(domain)
     end
 end
 
-% animation params
-rt = 0.75; % realtime rate
+% plot the state
 plot_states = 0;
+
+% animate the trajectory
+rt = 0.25; % realtime rate
 animate = 1;
-replays = 3;
+replays = 2;
 
 if plot_states == 1
     % plot all states
@@ -171,11 +173,11 @@ if animate == 1
 
             left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 3);
             right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 3);
-            left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
-            right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 1, 'MarkerFaceColor', 'r');
 
-            left_foot_pts = [left_foot_pts; left_foot];
-            right_foot_pts = [right_foot_pts; right_foot];
+            % left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
+            % right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 1, 'MarkerFaceColor', 'r');
+            % left_foot_pts = [left_foot_pts; left_foot];
+            % right_foot_pts = [right_foot_pts; right_foot];
 
             % draw the mass
             mass = plot(px, pz, 'ko', 'MarkerSize', 30, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
@@ -211,8 +213,8 @@ if animate == 1
             delete(right_leg);
             for j = 1:length(com_pts)
                 delete(com_pts(j));
-                delete(left_foot_pts(j));
-                delete(right_foot_pts(j));
+                % delete(left_foot_pts(j));
+                % delete(right_foot_pts(j));
             end
         end
     end
