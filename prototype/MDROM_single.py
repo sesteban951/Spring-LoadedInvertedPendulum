@@ -445,7 +445,7 @@ if __name__ == "__main__":
                                  g=9.81, 
                                  l0=0.65, 
                                  k=5000.0, 
-                                 b=0.0)
+                                 b=50.0)
     
     # declare control parameters
     control_params = PredictiveControlParams(N=750, 
