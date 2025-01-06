@@ -688,11 +688,11 @@ if __name__ == "__main__":
     # print(len(D))
 
     # save the data into CSV files
-    np.savetxt('./data/time.csv', t, delimiter=',')
-    np.savetxt('./data/state_com.csv', x_com.T, delimiter=',')
-    np.savetxt('./data/state_left.csv', x_left.T, delimiter=',')
-    np.savetxt('./data/state_right.csv', x_right.T, delimiter=',')
-    np.savetxt('./data/pos_left.csv', p_left.T, delimiter=',')
-    np.savetxt('./data/pos_right.csv', p_right.T, delimiter=',')
-    np.savetxt('./data/domain.csv', D, delimiter=',', fmt='%s')
+    np.savetxt('./data/double/time.csv', t, delimiter=',')
+    np.savetxt('./data/double/state_com.csv', x_com.T, delimiter=',')
+    np.savetxt('./data/double/state_left.csv', x_left.T, delimiter=',')
+    np.savetxt('./data/double/state_right.csv', x_right.T, delimiter=',')
+    np.savetxt('./data/double/pos_left.csv', p_left.T, delimiter=',')
+    np.savetxt('./data/double/pos_right.csv', p_right.T, delimiter=',')
+    np.savetxt('./data/double/domain.csv', D, delimiter=',', fmt='%s')
 

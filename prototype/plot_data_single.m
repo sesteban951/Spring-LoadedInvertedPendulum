@@ -4,13 +4,11 @@
 clear all; close all; clc;
 
 % Load data
-t = load('./data/double/time.csv');
-x_com = load('./data/double/state_com.csv');
-x_left = load('./data/double/state_left.csv');
-x_right = load('./data/double/state_right.csv');
-p_left = load('./data/double/pos_left.csv');
-p_right = load('./data/double/pos_right.csv');
-fileID = fopen('./data/double/domain.csv', 'r');
+t = load('./data/single/time.csv');
+x_com = load('./data/single/state_com.csv');
+x_leg = load('./data/single/state_leg.csv');
+p_foot = load('./data/single/pos_leg.csv');
+fileID = fopen('./data/single/domain.csv', 'r');
 domain = textscan(fileID, '%s', 'Delimiter', ',');
 domain = char(domain{1});
 fclose(fileID);
@@ -20,10 +18,10 @@ p_com = x_com(:,1:2);
 v_com = x_com(:,3:4);
 
 % leg states
-q_left = x_left(:,1:2);
-q_right = x_right(:,1:2);
-v_left = x_left(:,3:4);
-v_right = x_right(:,3:4);
+r = x_leg(:,1);
+theta = x_leg(:,2);
+rdot = x_leg(:,3);
+thetadot = x_leg(:,4);
 
 % convert the domains to int
 domain_int = zeros(length(domain), 1);
@@ -43,9 +41,11 @@ end
 plot_states = 0;
 
 % animate the trajectory
-rt = 1.0; % realtime rate
+rt = 0.25; % realtime rate
 animate = 1;
-replays = 3;
+replays = 2;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 if plot_states == 1
     % plot all states
@@ -86,38 +86,30 @@ if plot_states == 1
 
     subplot(3,4,3);
     hold on; grid on;
-    plot(t, q_left(:,1), 'LineWidth', 2);
-    plot(t, q_right(:,1), 'LineWidth', 2);
+    plot(t, r, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$r$ [m]', 'Interpreter', 'latex');
-    legend('Left', 'Right');
     title('Leg Length, r');
 
     subplot(3,4,4);
     hold on; grid on;
-    plot(t, q_left(:,2), 'LineWidth', 2);
-    plot(t, q_right(:,2), 'LineWidth', 2);
+    plot(t, theta, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$\theta$ [rad]', 'Interpreter', 'latex');
-    legend('Left', 'Right');
     title('Leg Angle, theta');
 
     subplot(3,4,7);
     hold on; grid on;
-    plot(t, v_left(:,1), 'LineWidth', 2);
-    plot(t, v_right(:,1), 'LineWidth', 2);
+    plot(t, rdot, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$\dot{r}$ [m/s]', 'Interpreter', 'latex');
-    legend('Left', 'Right');
     title('Leg Length Rate, r-dot');
 
     subplot(3,4,8);
     hold on; grid on;
-    plot(t, v_left(:,2), 'LineWidth', 2);
-    plot(t, v_right(:,2), 'LineWidth', 2);
+    plot(t, thetadot, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$\dot{\theta}$ [rad/s]', 'Interpreter', 'latex');
-    legend('Left', 'Right');
     title('Leg Angle Rate, theta-dot');
  
     subplot(3,4,[9:12]);
@@ -131,6 +123,8 @@ if plot_states == 1
     yticklabels({'F', 'L', 'R', 'D'});
 end
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
 % animate the com trajectory
 if animate == 1
 
@@ -143,10 +137,10 @@ if animate == 1
     xlabel('$p_x$ [m]', 'Interpreter', 'latex');
     ylabel('$p_z$ [m]', 'Interpreter', 'latex');
     grid on; axis equal;
-    px_min = min([p_com(:,1); p_left(:,1); p_right(:,1)]);
-    px_max = max([p_com(:,1); p_left(:,1); p_right(:,1)]);
-    pz_min = min([p_com(:,2); p_left(:,2); p_right(:,2)]);
-    pz_max = max([p_com(:,2); p_left(:,2); p_right(:,2)]);
+    px_min = min([p_com(:,1); p_foot(:,1)]);
+    px_max = max([p_com(:,1); p_foot(:,1)]);
+    pz_min = min([p_com(:,2); p_foot(:,2)]);
+    pz_max = max([p_com(:,2); p_foot(:,2)]);
     xlim([px_min-0.25, px_max+0.25]);
     ylim([min(0, pz_min)-0.25, pz_max+0.25]);
     
@@ -157,8 +151,7 @@ if animate == 1
         tic;
         ind = 1;
         com_pts = [];
-        left_foot_pts = [];
-        right_foot_pts = [];
+        foot_pts = [];
         while true
 
             % get COM position 
@@ -166,18 +159,13 @@ if animate == 1
             pz = p_com(ind,2);
 
             % draw the legs
-            px_left = p_left(ind,1);
-            pz_left = p_left(ind,2);
-            px_right = p_right(ind,1);
-            pz_right = p_right(ind,2);
+            px_left = p_foot(ind,1);
+            pz_left = p_foot(ind,2);
 
-            left_leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 3);
-            right_leg = plot([px, px_right], [pz, pz_right], 'r', 'LineWidth', 3);
+            leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 3);
 
-            % left_foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
-            % right_foot = plot(px_right, pz_right, 'ro', 'MarkerSize', 1, 'MarkerFaceColor', 'r');
-            % left_foot_pts = [left_foot_pts; left_foot];
-            % right_foot_pts = [right_foot_pts; right_foot];
+            foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
+            foot_pts = [foot_pts; foot];
 
             % draw the mass
             mass = plot(px, pz, 'ko', 'MarkerSize', 30, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
@@ -201,20 +189,17 @@ if animate == 1
             else
                 ind = ind + 1;
                 delete(mass);
-                delete(left_leg);
-                delete(right_leg);
+                delete(leg);
             end
         end
 
         % clean the plot if still replaying
         if i < replays
             delete(mass);
-            delete(left_leg);
-            delete(right_leg);
+            delete(leg);
             for j = 1:length(com_pts)
                 delete(com_pts(j));
-                % delete(left_foot_pts(j));
-                % delete(right_foot_pts(j));
+                delete(foot_pts(j));
             end
         end
     end
