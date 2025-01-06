@@ -40,6 +40,8 @@ plot_states = 0;
 animate = 1;
 rt = 1.0; % realtime rate
 replays = 1;
+plot_com = 0;
+plot_foot = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -158,18 +160,22 @@ if animate == 1
             px_foot = p_foot(ind,1);
             pz_foot = p_foot(ind,2);
             leg = plot([px, px_foot], [pz, pz_foot], 'b', 'LineWidth', 3);
-            foot = plot(px_foot, pz_foot, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
-            foot_pts = [foot_pts; foot];
+            if plot_foot == 1
+                foot = plot(px_foot, pz_foot, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
+                foot_pts = [foot_pts; foot];
+            end
 
             % draw the mass
             mass = plot(px, pz, 'ko', 'MarkerSize', 30, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
-            pt_pos = plot(px, pz, 'k.', 'MarkerSize', 5);
-            com_pts = [com_pts; pt_pos];
+            if plot_com ==1
+                pt_pos = plot(px, pz, 'k.', 'MarkerSize', 5);
+                com_pts = [com_pts; pt_pos];
+            end
 
             drawnow;
             
             % title
-            msg = sprintf('Time: %0.3f [sec]', t(ind) * rt);
+            msg = sprintf('Time: %0.3f [sec]\n vx = %0.3f, pz = %0.3f', t(ind) * rt, v_com(ind,1), p_com(ind,2));
             title(msg);
             
             % wait until the next time step
@@ -192,8 +198,12 @@ if animate == 1
             delete(mass);
             delete(leg);
             for j = 1:length(com_pts)
-                delete(com_pts(j));
-                delete(foot_pts(j));
+                if plot_com == 1
+                    delete(com_pts(j));
+                end
+                if plot_foot == 1
+                    delete(foot_pts(j));
+                end
             end
         end
     end

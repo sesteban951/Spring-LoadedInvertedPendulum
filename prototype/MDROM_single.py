@@ -249,6 +249,17 @@ class MDROM:
             r = u[0]
             theta = u[1]
 
+            # temporary raibert heuristic
+            px = p_com[0]
+            px_des = 0.1
+
+            vel = v_com[0]
+            vel_des = 0.0
+            kp = 0.0
+            kd = 0.2
+            theta = -kp * (px - px_des) - kd * (vel - vel_des)
+            theta = theta[0] 
+
             # pack into state vectors
             x_leg = np.array([[r],
                               [theta],
@@ -434,10 +445,10 @@ if __name__ == "__main__":
                                  g=9.81, 
                                  l0=0.65, 
                                  k=5000.0, 
-                                 b=500.0)
+                                 b=0.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=175, 
+    control_params = PredictiveControlParams(N=750, 
                                              dt=0.01, 
                                              K=100,
                                              interp='Z')
@@ -446,17 +457,17 @@ if __name__ == "__main__":
     mdrom = MDROM(system_params, control_params)
 
     # initial conditions
-    x0_com = np.array([[0.25], # px [m]
-                       [1.5], # py [m]
-                       [0.05],  # vx [m/s]
-                       [1]]) # vz [m/s]
+    x0_com = np.array([[0.], # px [m]
+                       [1.25], # pz [m]
+                       [2],  # vx [m/s]
+                       [.0]]) # vz [m/s]
     p_foot = np.array([[None],  # px [m]
-                       [None]]) # py [m]
+                       [None]]) # pz [m]
     D0 = 'F'
 
     # CONSTANT INPUT
     u_constant = np.array([[system_params.l0 * 1.0], # left leg
-                           [0]]) # right leg
+                           [-0.01]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation
@@ -472,8 +483,6 @@ if __name__ == "__main__":
     # print(p_left.shape)
     # print(p_right.shape)
     # print(len(D))
-
-    print(p_foot.T)
 
     # save the data into CSV files
     np.savetxt('./data/single/time.csv', t, delimiter=',')
