@@ -1,5 +1,5 @@
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% PLot some sim data
+% Plot some sim data
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 clear all; close all; clc;
 
@@ -7,7 +7,7 @@ clear all; close all; clc;
 t = load('./data/single/time.csv');
 x_com = load('./data/single/state_com.csv');
 x_leg = load('./data/single/state_leg.csv');
-p_foot = load('./data/single/pos_leg.csv');
+p_foot = load('./data/single/pos_foot.csv');
 fileID = fopen('./data/single/domain.csv', 'r');
 domain = textscan(fileID, '%s', 'Delimiter', ',');
 domain = char(domain{1});
@@ -28,12 +28,8 @@ domain_int = zeros(length(domain), 1);
 for i = 1:length(domain)
     if domain(i) == 'F'
         domain_int(i) = 0;
-    elseif domain(i) == 'L'
+    elseif domain(i) == 'G'
         domain_int(i) = 1;
-    elseif domain(i) == 'R'
-        domain_int(i) = 2;
-    elseif domain(i) == 'D'
-        domain_int(i) = 3;
     end
 end
 
@@ -41,9 +37,9 @@ end
 plot_states = 0;
 
 % animate the trajectory
-rt = 0.25; % realtime rate
 animate = 1;
-replays = 2;
+rt = 1.0; % realtime rate
+replays = 1;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -119,8 +115,8 @@ if plot_states == 1
     ylabel('Domain');
     title('Domain');
     ylim([-0.5, 3.5]);
-    yticks([0, 1, 2, 3]);
-    yticklabels({'F', 'L', 'R', 'D'});
+    yticks([0, 1]);
+    yticklabels({'F', 'G'});
 end
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -159,12 +155,10 @@ if animate == 1
             pz = p_com(ind,2);
 
             % draw the legs
-            px_left = p_foot(ind,1);
-            pz_left = p_foot(ind,2);
-
-            leg = plot([px, px_left], [pz, pz_left], 'b', 'LineWidth', 3);
-
-            foot = plot(px_left, pz_left, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
+            px_foot = p_foot(ind,1);
+            pz_foot = p_foot(ind,2);
+            leg = plot([px, px_foot], [pz, pz_foot], 'b', 'LineWidth', 3);
+            foot = plot(px_foot, pz_foot, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
             foot_pts = [foot_pts; foot];
 
             % draw the mass

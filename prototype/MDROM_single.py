@@ -201,7 +201,7 @@ class MDROM:
             xk_com = xk_com + (dt/6) * (f1 + 4*f2 + f3)
             xk_leg = self.update_leg_state(xk_com, p_foot, u1, Dk)
 
-            # check if hit switching surfaces and update state needed
+            # check if hit switching surfaces and update state if needed
             checked_contacts = self.check_switching(xk_com, xk_leg, u1, contacts)
             
             # if a change in contact detected
@@ -221,7 +221,7 @@ class MDROM:
             # store the foot positions
             if Dk == 'F':
                 pt_foot[:, i+1] = self.get_foot_pos(xk_com, xk_leg, pz_zero=False).flatten()
-            elif Dk == 'D':
+            elif Dk == 'G':
                 pt_foot[:, i+1] = p_foot.reshape(2)
 
             # store the domain
@@ -257,6 +257,7 @@ class MDROM:
         
         # in leg support (leg state governed by dynamics)
         if D == 'G':
+
             # compute relevant vectors
             r_vec = p_foot - p_com
             r_hat = r_vec / np.linalg.norm(r_vec)
@@ -275,9 +276,9 @@ class MDROM:
 
             # pack into state vectors
             x_leg = np.array([[r],
-                               [theta[0]],
-                               [rdot[0][0]],
-                               [thetadot[0]]])
+                              [theta[0]],
+                              [rdot[0][0]],
+                              [thetadot[0]]])
 
         return x_leg
 
@@ -366,7 +367,8 @@ class MDROM:
 
         # check the switching surface conditions
         # set by input
-        nom_length = (r >= u_leg)      # the leg is at its nominal uncompressed length # TODO: change based on inp
+        nom_length = (r >= u_leg)      # the leg is at its nominal uncompressed length
+        # nom_length = (r >= self.l0)      # the leg is at its nominal uncompressed length
         pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel # if true, leg has taken off into flight
 
@@ -435,26 +437,26 @@ if __name__ == "__main__":
                                  b=500.0)
     
     # declare control parameters
-    control_params = PredictiveControlParams(N=150, 
+    control_params = PredictiveControlParams(N=175, 
                                              dt=0.01, 
                                              K=100,
-                                             interp='L')
+                                             interp='Z')
 
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
 
     # initial conditions
     x0_com = np.array([[0.25], # px [m]
-                       [0.50], # py [m]
-                       [1],  # vx [m/s]
-                       [7]]) # vz [m/s]
-    p_foot = np.array([[0],  # px [m]
-                       [0]]) # py [m]
+                       [1.5], # py [m]
+                       [0.05],  # vx [m/s]
+                       [1]]) # vz [m/s]
+    p_foot = np.array([[None],  # px [m]
+                       [None]]) # py [m]
     D0 = 'F'
 
     # CONSTANT INPUT
     u_constant = np.array([[system_params.l0 * 1.0], # left leg
-                           [-np.pi/8]]) # right leg
+                           [0]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation
@@ -470,6 +472,8 @@ if __name__ == "__main__":
     # print(p_left.shape)
     # print(p_right.shape)
     # print(len(D))
+
+    print(p_foot.T)
 
     # save the data into CSV files
     np.savetxt('./data/single/time.csv', t, delimiter=',')
