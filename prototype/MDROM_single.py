@@ -16,11 +16,15 @@ class SystemParams:
     """
     System parameters
     """
-    m: float    # mass [kg]
-    g: float    # gravity [m/s^2]
-    l0: float   # spring free length [m]
-    k: float    # spring stiffness [N/m]
-    b: float    # damping coefficient [Ns/m]
+    m: float         # mass [kg]
+    g: float         # gravity [m/s^2]
+    k: float         # spring stiffness [N/m]
+    b: float         # damping coefficient [Ns/m]
+    l0: float        # spring free length [m]
+    r_min: float     # spring min length [m]
+    r_max: float     # spring max length [m]
+    theta_min: float # revolute leg min angle [rad]
+    theta_max: float # revolute leg max angle [rad]
 
 @dataclass
 class PredictiveControlParams:
@@ -48,7 +52,7 @@ class UniformDistribution:
 
 class MDROM:
     """
-     Planar Spring loaded inverted pendulum (SLIP) model
+     Class for the Planar Spring loaded inverted pendulum (SLIP) model
     """
 
     def __init__(self, system_params, control_params):
@@ -56,9 +60,11 @@ class MDROM:
         # initialize system parameters
         self.m = system_params.m
         self.g = system_params.g
-        self.l0 = system_params.l0
         self.k = system_params.k
         self.b = system_params.b
+        self.l0 = system_params.l0
+        self.r_min = system_params.r_min
+        self.r_max = system_params.r_max
 
         # initialize control parameters
         self.dt = control_params.dt
@@ -207,6 +213,16 @@ class MDROM:
             # if a change in contact detected
             if checked_contacts != contacts:
                 
+                # check if the take off state is viable
+                # TODO: should I check viability of the touch down?
+                if (contacts==True) and (checked_contacts==False):
+                    viability = self.in_viability_kernel(xk_com, xk_leg)
+                    
+                    # you're going to die, exit the for loop
+                    if viability == False:
+                        print('Exited the viability kernel, exited rollout...')
+                        break
+
                 # update the feet positions
                 p_foot = self.apply_reset(xk_com, xk_leg, checked_contacts)
                 
@@ -378,7 +394,7 @@ class MDROM:
 
         # check the switching surface conditions
         # set by input
-        nom_length = (r >= u_leg)      # the leg is at its nominal uncompressed length
+        nom_length = (r >= u_leg)        # the leg is at its nominal uncompressed length
         # nom_length = (r >= self.l0)      # the leg is at its nominal uncompressed length
         pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel # if true, leg has taken off into flight
@@ -390,6 +406,30 @@ class MDROM:
             contact = True
 
         return contact
+    
+    # check if given the take off state is viable, is there an input to save you from eating dirt
+    def in_viability_kernel(self, x_com_TO, x_leg_TO):
+
+        # compute the apex time if any 
+        pz_com_TO = x_com_TO[1]
+        vz_com_TO = x_com_TO[3]
+
+        # compute the apex height
+        if vz_com_TO <= 0.0:
+            pz_com_max = pz_com_TO
+        else:
+            t_apex = vz_com_TO / self.g
+            pz_com_max = pz_com_TO + vz_com_TO * t_apex - 0.5 * self.g * t_apex**2
+
+        # if you can't retract your leg enough by the time you are at the apex, 
+        # there is no control input that can save you, you are going to eat dirt
+        # this is only becuase we have infinite swing velocity, TODO: eventually will have swing vel.
+        if self.r_min >= pz_com_max:
+            viable = False
+        else:  
+            viable = True   
+
+        return viable
 
     # apply a reset map
     def apply_reset(self, x_com, x_leg, contact):
@@ -435,6 +475,18 @@ class MDROM:
         return contact
 
 #######################################################################
+# SAMPLING PREDICTIVE CONTROL
+#######################################################################
+
+class PredictiveController:
+    """
+    A class that handles all of the control via sample predictive
+    control. 
+    """
+    def __init__(self, mdrom):
+        self.mdrom = mdrom
+
+#######################################################################
 # MAIN
 #######################################################################
 
@@ -443,13 +495,17 @@ if __name__ == "__main__":
     # decalre the system parameters
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
-                                 l0=0.65, 
                                  k=5000.0, 
-                                 b=50.0)
-    
+                                 b=50.0,
+                                 l0=0.65,
+                                 r_min=0.3,
+                                 r_max=0.75,
+                                 theta_min=-np.pi/4,
+                                 theta_max=-np.pi/4,)
+
     # declare control parameters
-    control_params = PredictiveControlParams(N=750, 
-                                             dt=0.01, 
+    control_params = PredictiveControlParams(N=2500, 
+                                             dt=0.001, 
                                              K=100,
                                              interp='Z')
 
@@ -458,7 +514,7 @@ if __name__ == "__main__":
 
     # initial conditions
     x0_com = np.array([[0.], # px [m]
-                       [1.25], # pz [m]
+                       [0.67], # pz [m]
                        [2],  # vx [m/s]
                        [.0]]) # vz [m/s]
     p_foot = np.array([[None],  # px [m]
@@ -467,7 +523,7 @@ if __name__ == "__main__":
 
     # CONSTANT INPUT
     u_constant = np.array([[system_params.l0 * 1.0], # left leg
-                           [-0.01]]) # right leg
+                           [0.0]]) # right leg
     U = np.tile(u_constant, (1, control_params.N-1))
 
     # run the simulation

@@ -18,9 +18,11 @@ class SystemParams:
     """
     m: float    # mass [kg]
     g: float    # gravity [m/s^2]
-    l0: float   # spring free length [m]
     k: float    # spring stiffness [N/m]
     b: float    # damping coefficient [Ns/m]
+    l0: float   # spring free length [m]
+    lmin: float # spring min length [m]
+    lmax: float # spring max length [m]
 
 @dataclass
 class PredictiveControlParams:
@@ -56,9 +58,11 @@ class MDROM:
         # initialize system parameters
         self.m = system_params.m
         self.g = system_params.g
-        self.l0 = system_params.l0
         self.k = system_params.k
         self.b = system_params.b
+        self.l0 = system_params.l0
+        self.lmin = system_params.lmin
+        self.lmax = system_params.lmax
 
         # initialize control parameters
         self.dt = control_params.dt
@@ -610,9 +614,11 @@ if __name__ == "__main__":
     # decalre the system parameters
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
-                                 l0=0.65, 
                                  k=5000.0, 
-                                 b=500.0)
+                                 b=500.0,
+                                 l0=0.65,
+                                 lmin=0.3,
+                                 lmax=0.7)
     
     # declare control parameters
     control_params = PredictiveControlParams(N=150, 

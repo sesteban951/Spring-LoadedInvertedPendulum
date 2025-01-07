@@ -38,7 +38,7 @@ plot_states = 0;
 
 % animate the trajectory
 animate = 1;
-rt = 1.0; % realtime rate
+rt = 0.5; % realtime rate
 replays = 1;
 plot_com = 0;
 plot_foot = 0;
@@ -159,7 +159,11 @@ if animate == 1
             % draw the legs
             px_foot = p_foot(ind,1);
             pz_foot = p_foot(ind,2);
-            leg = plot([px, px_foot], [pz, pz_foot], 'b', 'LineWidth', 3);
+            if domain(ind) == 'F'
+                leg = plot([px, px_foot], [pz, pz_foot], 'b', 'LineWidth', 3);
+            elseif domain(ind) == 'G'
+                leg = plot([px, px_foot], [pz, pz_foot], 'r', 'LineWidth', 3);
+            end
             if plot_foot == 1
                 foot = plot(px_foot, pz_foot, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
                 foot_pts = [foot_pts; foot];
@@ -175,7 +179,8 @@ if animate == 1
             drawnow;
             
             % title
-            msg = sprintf('Time: %0.3f [sec]\n vx = %0.3f, pz = %0.3f', t(ind) * rt, v_com(ind,1), p_com(ind,2));
+            msg = sprintf('Time: %0.3f [sec]\n vx = %0.3f, px = %0.3f\n vz = %0.3f, pz = %0.3f',...
+                         t(ind) * rt, v_com(ind,1), p_com(ind,1), v_com(ind,2), p_com(ind,2));
             title(msg);
             
             % wait until the next time step
