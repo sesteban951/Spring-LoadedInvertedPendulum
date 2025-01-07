@@ -37,14 +37,15 @@ class PredictiveControlParams:
     interp: str # interpolation method, 'Z' for zero order hold, 'L' for linear
 
 @dataclass
-class UniformDistribution:
+class ParametricDistribution:
     """
-    Uniform distribution parameters
+    Parametric distribution parameters
     """
-    r_mean: np.array     # prismatic leg center [m]
-    r_delta: float       # prismatic leg delta range [m]
-    theta_mean: np.array # revolute leg center [rad]
-    theta_delta: float   # revolute leg delta range [rad]
+    family: str          # distribution family, 'G' Gaussian, 'U' Uniform
+    mean: np.array       # mean of the distribution
+    cov: np.array        # covaraince of the distribution (Guassian only)
+    lb: np.array         # lower bound of the distribution (Uniform only)
+    ub: np.array         # upper bound of the distribution (Uniform only)
 
 #######################################################################
 # DYNAMICS
@@ -55,7 +56,9 @@ class MDROM:
      Class for the Planar Spring loaded inverted pendulum (SLIP) model
     """
 
-    def __init__(self, system_params, control_params):
+    def __init__(self, 
+                 system_params, 
+                 control_params):
         
         # initialize system parameters
         self.m = system_params.m
@@ -65,6 +68,8 @@ class MDROM:
         self.l0 = system_params.l0
         self.r_min = system_params.r_min
         self.r_max = system_params.r_max
+        self.theta_min = system_params.theta_min
+        self.theta_max = system_params.theta_max
 
         # initialize control parameters
         self.dt = control_params.dt
@@ -144,6 +149,12 @@ class MDROM:
 
                 # linear interpolation
                 u = u0 + (uf - u0) * (t - t0) / (tf - t0)
+
+        # saturate the inputs
+        u_r = np.clip(u[0], self.r_min, self.r_max)
+        u_theta = np.clip(u[1], self.theta_min, self.theta_max)
+        u = np.array([u_r,
+                      u_theta])
 
         return u
     
@@ -483,8 +494,16 @@ class PredictiveController:
     A class that handles all of the control via sample predictive
     control. 
     """
-    def __init__(self, mdrom):
+    def __init__(self, 
+                 x0, p_feet_0, D0,
+                 mdrom, sys_params, ctrl_params, distr_params):
+        
+        # make internal objects
         self.mdrom = mdrom
+        self.sys_params = sys_params
+        self.ctrl_params = ctrl_params
+        self.distr_params = distr_params
+
 
 #######################################################################
 # MAIN
@@ -500,17 +519,38 @@ if __name__ == "__main__":
                                  l0=0.65,
                                  r_min=0.3,
                                  r_max=0.75,
-                                 theta_min=-np.pi/4,
-                                 theta_max=-np.pi/4,)
+                                 theta_min=-np.pi/3,
+                                 theta_max=-np.pi/3,)
 
     # declare control parameters
-    control_params = PredictiveControlParams(N=2500, 
+    control_params = PredictiveControlParams(N=50, 
                                              dt=0.001, 
                                              K=100,
                                              interp='Z')
 
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
+
+    # create parametric distribution parameters
+    mean_r = system_params.l0
+    mean_theta = 0.0
+    std_dev_r = 0.5
+    std_dev_theta = np.pi/4
+
+    mean = np.array([[mean_r],              # r [m]
+                     [mean_theta]])         # theta [rad]
+    std_dev = np.array([std_dev_r**2,       # r [m]
+                        std_dev_theta**2])  # theta [rad]
+    mean_initial = np.tile(mean, (control_params.N-1, 1))
+    std_dev_matrix = np.diag(std_dev)
+    I = np.eye(control_params.N-1)
+    cov_initial = np.kron(I, std_dev_matrix)
+
+    distribution_params = ParametricDistribution(family='G',
+                                                 mean=mean_initial,
+                                                 cov=cov_initial,
+                                                 lb=None,
+                                                 ub=None)
 
     # initial conditions
     x0_com = np.array([[0.], # px [m]
@@ -521,28 +561,31 @@ if __name__ == "__main__":
                        [None]]) # pz [m]
     D0 = 'F'
 
-    # CONSTANT INPUT
-    u_constant = np.array([[system_params.l0 * 1.0], # left leg
-                           [0.0]]) # right leg
-    U = np.tile(u_constant, (1, control_params.N-1))
+    # create the predictive controller
 
-    # run the simulation
-    t0 = time.time()
-    t, x_com, x_leg, p_foot, D = mdrom.RK3_rollout(x0_com, p_foot, U, D0)
-    tf = time.time()
-    print('Simulation time: ', tf - t0)
 
-    # print(t.shape)
-    # print(x_com.shape)
-    # print(x_left.shape)
-    # print(x_right.shape)
-    # print(p_left.shape)
-    # print(p_right.shape)
-    # print(len(D))
+    # # CONSTANT INPUT
+    # u_constant = np.array([[system_params.l0 * 1.0], # left leg
+    #                        [0.0]]) # right leg
+    # U = np.tile(u_constant, (1, control_params.N-1))
 
-    # save the data into CSV files
-    np.savetxt('./data/single/time.csv', t, delimiter=',')
-    np.savetxt('./data/single/state_com.csv', x_com.T, delimiter=',')
-    np.savetxt('./data/single/state_leg.csv', x_leg.T, delimiter=',')
-    np.savetxt('./data/single/pos_foot.csv', p_foot.T, delimiter=',')
-    np.savetxt('./data/single/domain.csv', D, delimiter=',', fmt='%s')
+    # # run the simulation
+    # t0 = time.time()
+    # t, x_com, x_leg, p_foot, D = mdrom.RK3_rollout(x0_com, p_foot, U, D0)
+    # tf = time.time()
+    # print('Simulation time: ', tf - t0)
+
+    # # print(t.shape)
+    # # print(x_com.shape)
+    # # print(x_left.shape)
+    # # print(x_right.shape)
+    # # print(p_left.shape)
+    # # print(p_right.shape)
+    # # print(len(D))
+
+    # # save the data into CSV files
+    # np.savetxt('./data/single/time.csv', t, delimiter=',')
+    # np.savetxt('./data/single/state_com.csv', x_com.T, delimiter=',')
+    # np.savetxt('./data/single/state_leg.csv', x_leg.T, delimiter=',')
+    # np.savetxt('./data/single/pos_foot.csv', p_foot.T, delimiter=',')
+    # np.savetxt('./data/single/domain.csv', D, delimiter=',', fmt='%s')
