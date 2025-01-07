@@ -25,6 +25,7 @@ class SystemParams:
     r_max: float     # spring max length [m]
     theta_min: float # revolute leg min angle [rad]
     theta_max: float # revolute leg max angle [rad]
+    u_dim: int       # size of the input vector
 
 @dataclass
 class PredictiveControlParams:
@@ -494,16 +495,46 @@ class PredictiveController:
     A class that handles all of the control via sample predictive
     control. 
     """
-    def __init__(self, 
-                 x0, p_feet_0, D0,
-                 mdrom, sys_params, ctrl_params, distr_params):
+    def __init__(self, mdrom, sys_params, ctrl_params, distr_params):
         
         # make internal objects
         self.mdrom = mdrom
         self.sys_params = sys_params
         self.ctrl_params = ctrl_params
         self.distr_params = distr_params
+        self.u_dim = 2
 
+    # sample an input trajectory given a distribution
+    def sample_input_trajectory(self):
+
+        # get the distribution parameters
+        mean = self.distr_params.mean
+        
+        # sample from Gaussian dsitribution
+        if self.distr_params.family == 'G':
+            cov = self.distr_params.cov
+         
+            # U_vec = mean + L @ np.random.randn(mean.shape[0]);  L = np.linalg.cholesky(cov)
+            # https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Drawing_values_from_the_distribution
+            L = np.linalg.cholesky(cov)
+            Uhat_vec = np.random.randn(mean.shape[0])
+            U_vec = mean.flatten() + L @ Uhat_vec
+            # U_vec = np.random.multivariate_normal(mean.flatten(), cov).T # (so slow)
+
+        # sample from uniform distirbution
+        elif self.distr_params.family == 'U':
+            lb = self.distr_params.lb
+            ub = self.distr_params.ub
+            U_vec = np.random.uniform(lb.flatten(), ub.flatten()).T
+
+        # unflatten the trajectory
+        U_traj = np.zeros((self.u_dim, self.ctrl_params.N-1))
+        for i in range(0, self.ctrl_params.N-1):
+            U_traj[:, i] = U_vec[ self.u_dim*i : self.u_dim*i+self.u_dim ]
+
+        print(U_traj.shape)
+
+        return U_traj
 
 #######################################################################
 # MAIN
@@ -520,10 +551,11 @@ if __name__ == "__main__":
                                  r_min=0.3,
                                  r_max=0.75,
                                  theta_min=-np.pi/3,
-                                 theta_max=-np.pi/3,)
+                                 theta_max=np.pi/3,
+                                 u_dim=2)
 
     # declare control parameters
-    control_params = PredictiveControlParams(N=50, 
+    control_params = PredictiveControlParams(N=2000, 
                                              dt=0.001, 
                                              K=100,
                                              interp='Z')
@@ -539,6 +571,8 @@ if __name__ == "__main__":
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
+    
+    # Gaussian distribution
     std_dev = np.array([std_dev_r**2,       # r [m]
                         std_dev_theta**2])  # theta [rad]
     mean_initial = np.tile(mean, (control_params.N-1, 1))
@@ -546,23 +580,48 @@ if __name__ == "__main__":
     I = np.eye(control_params.N-1)
     cov_initial = np.kron(I, std_dev_matrix)
 
-    distribution_params = ParametricDistribution(family='G',
+    # Uniform distribution
+    lb_r = system_params.r_min
+    lb_theta = system_params.theta_min
+    ub_r = system_params.r_max
+    ub_theta = system_params.theta_max
+
+    lb = np.array([[lb_r],      # r [m]
+                   [lb_theta]]) # theta [rad]
+    ub = np.array([[ub_r],      # r [m]
+                   [ub_theta]]) # theta [rad]
+    ones_vec = np.ones((control_params.N-1, 1))
+    lb_initial = np.kron(ones_vec, lb)
+    ub_initial = np.kron(ones_vec, ub)
+    
+    distribution_params = ParametricDistribution(family='U',
                                                  mean=mean_initial,
                                                  cov=cov_initial,
-                                                 lb=None,
-                                                 ub=None)
+                                                 lb=lb_initial,
+                                                 ub=ub_initial)
 
-    # initial conditions
-    x0_com = np.array([[0.], # px [m]
-                       [0.67], # pz [m]
-                       [2],  # vx [m/s]
-                       [.0]]) # vz [m/s]
-    p_foot = np.array([[None],  # px [m]
-                       [None]]) # pz [m]
-    D0 = 'F'
+    # create a predictive controller object
+    ctrl = PredictiveController(mdrom, system_params, control_params, distribution_params)
+    t0 = time.time()
+    U = ctrl.sample_input_trajectory()
+    tf = time.time()
+    print('Sampling time: ', tf - t0)
 
-    # create the predictive controller
+    # plot the trajectory
+    plt.figure()
+    plt.plot(U[0, :], U[1, :], 'r.')
+    plt.grid()
+    plt.axis('equal')
+    plt.show()
 
+    # # initial conditions
+    # x0_com = np.array([[0.], # px [m]
+    #                    [0.67], # pz [m]
+    #                    [2],  # vx [m/s]
+    #                    [.0]]) # vz [m/s]
+    # p_foot = np.array([[None],  # px [m]
+    #                    [None]]) # pz [m]
+    # D0 = 'F'
 
     # # CONSTANT INPUT
     # u_constant = np.array([[system_params.l0 * 1.0], # left leg
