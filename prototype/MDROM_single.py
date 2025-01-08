@@ -323,7 +323,10 @@ class MDROM:
 
     # compute foot position and veclocity in world
     def get_foot_pos(self, x_com, x_leg, pz_zero):
-
+        """
+        Get the foot location in the world frame. Usefull for checking switching surfaces
+        and recording history of foot locations
+        """
         # unpack the states
         p_com = np.array([[x_com[0]],
                           [x_com[1]]]).reshape(2, 1)
@@ -352,7 +355,6 @@ class MDROM:
         """
         Check if the state has hit any switching surfaces
         """
-
          # In Flight (F)
         if contact == False:
             # check for touchdown
@@ -421,7 +423,10 @@ class MDROM:
     
     # check if given the take off state is viable, is there an input to save you from eating dirt
     def in_viability_kernel(self, x_com_TO, x_leg_TO):
-
+        """
+        Check if the take off state is viable. 
+        Given the take off state is there an input that can save you?
+        """
         # compute the apex time if any 
         pz_com_TO = x_com_TO[1]
         vz_com_TO = x_com_TO[3]
@@ -435,7 +440,7 @@ class MDROM:
 
         # if you can't retract your leg enough by the time you are at the apex, 
         # there is no control input that can save you, you are going to eat dirt
-        # this is only becuase we have infinite swing velocity, TODO: eventually will have swing vel.
+        # this is only becuase we have infinite swing velocity, TODO: eventually will have swing vel too.
         if self.r_min >= pz_com_max:
             viable = False
         else:  
@@ -445,6 +450,10 @@ class MDROM:
 
     # apply a reset map
     def apply_reset(self, x_com, x_leg, contact):
+        """
+        Changing the foot location effectively applies a reset map to the system.
+        """
+        # TODO: eventually you will need to have a swing leg velocity as well
 
         # Left leg update
         if contact == True:
@@ -462,7 +471,6 @@ class MDROM:
         """
         Map the contact state to a unique domain
         """
-
         # Flight (F)
         if contact == False:
             D = 'F'
@@ -475,7 +483,7 @@ class MDROM:
     # Domain mapping function
     def contact_identification(self, D):
         """
-        Simple contact identification
+        Simple contact identification given a domain
         """
         # Flight (F)
         if D == 'F':
@@ -502,24 +510,29 @@ class PredictiveController:
         self.sys_params = sys_params
         self.ctrl_params = ctrl_params
         self.distr_params = distr_params
-        self.u_dim = 2
+
+        # predictive control parameters
+        self.dt = ctrl_params.dt
+        self.N = ctrl_params.N
+        self.K = ctrl_params.K
 
     # sample an input trajectory given a distribution
     def sample_input_trajectory(self):
-
+        """
+        Given a distribution, sample an input trajectory
+        """
         # get the distribution parameters
         mean = self.distr_params.mean
         
         # sample from Gaussian dsitribution
         if self.distr_params.family == 'G':
             cov = self.distr_params.cov
-         
-            # U_vec = mean + L @ np.random.randn(mean.shape[0]);  L = np.linalg.cholesky(cov)
+        
             # https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Drawing_values_from_the_distribution
             L = np.linalg.cholesky(cov)
             Uhat_vec = np.random.randn(mean.shape[0])
             U_vec = mean.flatten() + L @ Uhat_vec
-            # U_vec = np.random.multivariate_normal(mean.flatten(), cov).T # (so slow)
+            # U_vec = np.random.multivariate_normal(mean.flatten(), cov).T # (SLOW!! DO NOT USE)
 
         # sample from uniform distirbution
         elif self.distr_params.family == 'U':
@@ -528,13 +541,44 @@ class PredictiveController:
             U_vec = np.random.uniform(lb.flatten(), ub.flatten()).T
 
         # unflatten the trajectory
-        U_traj = np.zeros((self.u_dim, self.ctrl_params.N-1))
+        U_traj = np.zeros((2, self.ctrl_params.N-1))
         for i in range(0, self.ctrl_params.N-1):
-            U_traj[:, i] = U_vec[ self.u_dim*i : self.u_dim*i+self.u_dim ]
-
-        print(U_traj.shape)
+            U_traj[:, i] = U_vec[ 2*i : 2*i+2 ]
 
         return U_traj
+
+    # generate single integrator dynamics solution
+    def generate_reference_trajectory(self, x0_com, pz_des, vx_des):
+        """
+        Based on where the COM currently is, come up with
+        """
+        # some MPC parameters
+        dt = self.ctrl_params.dt
+        N = self.ctrl_params.N
+
+        # initial position 
+        px_0 = x0_com[0]
+
+        # initilize the reference trajectory
+        X_com_des = np.zeros((4, N))
+        X_com_des[1, :] = np.ones((1, N)) * pz_des
+        X_com_des[2, :] = np.ones((1, N)) * vx_des
+        X_com_des[3, :] = np.zeros((1, N))
+
+        # generate the reference trajectory
+        for i in range(0, N):
+            t = i * dt
+            px_des = px_0 + vx_des * t
+            X_com_des[0, i] = px_des[0]
+
+        return X_com_des
+
+    # cost function
+    def cost_function(self, X_com_des, X_com, X_leg, P_foot, U, D):
+        """
+        Evaulate the cost function given a trajectory
+        """
+        pass
 
 #######################################################################
 # MAIN
@@ -555,7 +599,7 @@ if __name__ == "__main__":
                                  u_dim=2)
 
     # declare control parameters
-    control_params = PredictiveControlParams(N=2000, 
+    control_params = PredictiveControlParams(N=20, 
                                              dt=0.001, 
                                              K=100,
                                              interp='Z')
@@ -594,7 +638,7 @@ if __name__ == "__main__":
     lb_initial = np.kron(ones_vec, lb)
     ub_initial = np.kron(ones_vec, ub)
     
-    distribution_params = ParametricDistribution(family='U',
+    distribution_params = ParametricDistribution(family='G',
                                                  mean=mean_initial,
                                                  cov=cov_initial,
                                                  lb=lb_initial,
@@ -602,18 +646,22 @@ if __name__ == "__main__":
 
     # create a predictive controller object
     ctrl = PredictiveController(mdrom, system_params, control_params, distribution_params)
-    t0 = time.time()
-    U = ctrl.sample_input_trajectory()
-    tf = time.time()
-    print('Sampling time: ', tf - t0)
+    # t0 = time.time()
+    # U = ctrl.sample_input_trajectory()
+    # tf = time.time()
+    # print('Sampling time: ', tf - t0)
 
     # plot the trajectory
-    plt.figure()
-    plt.plot(U[0, :], U[1, :], 'r.')
-    plt.grid()
-    plt.axis('equal')
-    plt.show()
+    # plt.figure()
+    # plt.plot(U[0, :], U[1, :], 'r.')
+    # plt.plot(U[0, :], 'r.')
+    # plt.plot(U[1, :], 'b.')
+    # plt.grid()
+    # plt.axis('equal')
+    # plt.show()
 
+    X_des = ctrl.generate_reference_trajectory(np.array([[0.0], [0.67], [0.0], [0.0]]), 0.75, 0.5)
+    
     # # initial conditions
     # x0_com = np.array([[0.], # px [m]
     #                    [0.67], # pz [m]
