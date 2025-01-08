@@ -25,7 +25,6 @@ class SystemParams:
     r_max: float     # spring max length [m]
     theta_min: float # revolute leg min angle [rad]
     theta_max: float # revolute leg max angle [rad]
-    u_dim: int       # size of the input vector
 
 @dataclass
 class PredictiveControlParams:
@@ -617,6 +616,44 @@ class PredictiveController:
         total_cost = state_cost + terminal_cost
         
         return total_cost[0][0]
+    
+    # perform horizon rollouts
+    def monte_carlo(self, x0, p_foot, D0):
+
+        # preallocate the the containers
+        J_list = np.zeros((1, self.K))            # cost function list
+        U_list = np.zeros((2, self.N-1, self.K))  # input trajectory list
+        S_list = [None for _ in range(self.K)]    # solution list
+
+        # generate the reference trajectory
+        vx_des = 0.25
+        pz_des = 0.72
+        X_des = self.generate_reference_trajectory(x0, pz_des, vx_des)
+
+        # perform the rollouts
+        for k in range(0, self.K):
+            # sample an input trajectory
+            U = self.sample_input_trajectory()
+            
+            # rollout the dynamics under the input trajectory
+            S = self.mdrom.RK3_rollout(x0, p_foot, U, D0)
+
+            # evaluate the cost function
+            J = self.cost_function(X_des, S)
+
+            # save the data
+            J_list[:,k] = J
+            U_list[:, :, k] = U
+            S_list[k] = S
+
+        # reorder the rollouts based on cost
+        idx = np.argsort(J_list)
+        idx = idx[0, :]
+        J_list = J_list[:, idx]
+        U_list = U_list[:, :, idx]
+        S_list = [S_list[i] for i in idx]
+
+        return S_list, U_list, J_list
 
 #######################################################################
 # MAIN
@@ -633,17 +670,16 @@ if __name__ == "__main__":
                                  r_min=0.3,
                                  r_max=0.75,
                                  theta_min=-np.pi/3,
-                                 theta_max=np.pi/3,
-                                 u_dim=2)
+                                 theta_max=np.pi/3)
 
     # declare control parameters
     Q_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Q = np.diag(Q_diags)
     Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=250, 
-                                             dt=0.005, 
-                                             K=100,
+    control_params = PredictiveControlParams(N=45, 
+                                             dt=0.02, 
+                                             K=500,
                                              interp='Z',
                                              Q=Q,
                                              Qf=Qf)
@@ -694,37 +730,24 @@ if __name__ == "__main__":
     # INITIAL CONDITIONS
     x0_com = np.array([[0.], # px [m]
                        [0.67], # pz [m]
-                       [2],  # vx [m/s]
-                       [.0]]) # vz [m/s]
+                       [1],  # vx [m/s]
+                       [1]]) # vz [m/s]
     p_foot = np.array([[None],  # px [m]
                        [None]]) # pz [m]
     D0 = 'F'
 
-    # GENERATE REFERENCE TRAJECTORY
-    vx_des = 0.75
-    pz_des = 0.5
-    X_des = ctrl.generate_reference_trajectory(x0_com, pz_des, vx_des)
+    S_list, U_list, J_list = ctrl.monte_carlo(x0_com, p_foot, D0)
 
-    # CONSTANT INPUT
-    u_constant = np.array([[system_params.l0 * 1.0], # left leg
-                           [0.0]]) # right leg
-    U = np.tile(u_constant, (1, control_params.N-1))
-
-    # RUN THE SIMULATION
-    t0 = time.time()
-    sol = mdrom.RK3_rollout(x0_com, p_foot, U, D0)
-    tf = time.time()
-    print('Simulation time: ', tf - t0)
-
-    # COST FUNCTION
-    c = ctrl.cost_function(X_des, sol)
+    S_star = S_list[0]
+    U_star = U_list[:, :, 0]
+    J_star = J_list[0]
 
     # unpack the solution
-    t = sol[0]
-    x_com = sol[1]
-    x_leg = sol[2]
-    p_foot = sol[3]
-    D = sol[4]
+    t = S_star[0]
+    x_com = S_star[1]
+    x_leg = S_star[2]
+    p_foot = S_star[3]
+    D = S_star[4]
 
     # save the data into CSV files
     np.savetxt('./data/single/time.csv', t, delimiter=',')
