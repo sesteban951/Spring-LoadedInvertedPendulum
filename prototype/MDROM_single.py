@@ -32,10 +32,12 @@ class PredictiveControlParams:
     """
     Predictive control parameters
     """
-    N: int      # prediction horizon
-    dt: float   # time step [s]
-    K: int      # number of rollouts
-    interp: str # interpolation method, 'Z' for zero order hold, 'L' for linear
+    N: int       # prediction horizon
+    dt: float    # time step [s]
+    K: int       # number of rollouts
+    interp: str  # interpolation method, 'Z' for zero order hold, 'L' for linear
+    Q: np.array   # integrated state cost matrix
+    Qf: np.array  # terminal state cost matrix
 
 @dataclass
 class ParametricDistribution:
@@ -578,11 +580,43 @@ class PredictiveController:
         return X_com_des
 
     # cost function evaluation
-    def cost_function(self, X_com_des, X_com, X_leg, P_foot, U, D):
+    def cost_function(self, X_com_des, sol):
         """
         Evaulate the cost function given a propagated and desired trajecotry.
         """
-        return None
+        # unpack solution
+        # T = sol[0]
+        X_com = sol[1]
+        # X_leg = sol[2]
+        # P_foot = sol[3]
+        # D = sol[4]
+
+        # unpack some cost parameters
+        Q = self.ctrl_params.Q
+        Qf = self.ctrl_params.Qf
+
+        # stage cost
+        state_cost = 0.0
+        for i in range(0, self.N-1):
+            # compute error
+            xi_com = X_com[:, i]   
+            xi_com_des = X_com_des[:, i]
+            e_com = (xi_com - xi_com_des).reshape(4, 1)
+
+            # compute cost
+            cost = e_com.T @ Q @ e_com
+            state_cost += cost
+
+        # terminal cost
+        xf_com = X_com[:, self.N-1]
+        xf_com_des = X_com_des[:, self.N-1]
+        ef_com = (xf_com - xf_com_des).reshape(4, 1)
+        terminal_cost = ef_com.T @ Qf @ ef_com
+
+        # total cost
+        total_cost = state_cost + terminal_cost
+        
+        return total_cost[0][0]
 
 #######################################################################
 # MAIN
@@ -603,10 +637,16 @@ if __name__ == "__main__":
                                  u_dim=2)
 
     # declare control parameters
+    Q_diags = np.array([1.0, 1.0, 0.05, 0.05])
+    Q = np.diag(Q_diags)
+    Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
+    Qf = np.diag(Qf_diags)
     control_params = PredictiveControlParams(N=250, 
                                              dt=0.005, 
                                              K=100,
-                                             interp='Z')
+                                             interp='Z',
+                                             Q=Q,
+                                             Qf=Qf)
 
     # declare reduced order model object
     mdrom = MDROM(system_params, control_params)
@@ -677,7 +717,7 @@ if __name__ == "__main__":
     print('Simulation time: ', tf - t0)
 
     # COST FUNCTION
-
+    c = ctrl.cost_function(X_des, sol)
 
     # unpack the solution
     t = sol[0]
