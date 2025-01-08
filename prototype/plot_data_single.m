@@ -38,7 +38,7 @@ plot_states = 0;
 
 % animate the trajectory
 animate = 1;
-rt = 0.01; % realtime rate
+rt = 0.5; % realtime rate
 replays = 1;
 plot_com = 0;
 plot_foot = 0;

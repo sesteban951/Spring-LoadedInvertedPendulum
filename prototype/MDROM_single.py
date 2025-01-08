@@ -255,7 +255,10 @@ class MDROM:
             # store the domain
             D[i+1] = Dk
 
-        return Tx, xt_com, xt_leg, pt_foot,  D
+        # package into a solution
+        sol = (Tx, xt_com, xt_leg, pt_foot, D)
+
+        return sol
     
     #################################  STATE UPDATES  #################################
 
@@ -550,7 +553,8 @@ class PredictiveController:
     # generate single integrator dynamics solution
     def generate_reference_trajectory(self, x0_com, pz_des, vx_des):
         """
-        Based on where the COM currently is, come up with
+        Based on where the COM currently is, generate a reference trajectory
+        with constant velocity and desired height
         """
         # some MPC parameters
         dt = self.ctrl_params.dt
@@ -573,12 +577,12 @@ class PredictiveController:
 
         return X_com_des
 
-    # cost function
+    # cost function evaluation
     def cost_function(self, X_com_des, X_com, X_leg, P_foot, U, D):
         """
-        Evaulate the cost function given a trajectory
+        Evaulate the cost function given a propagated and desired trajecotry.
         """
-        pass
+        return None
 
 #######################################################################
 # MAIN
@@ -590,7 +594,7 @@ if __name__ == "__main__":
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=5000.0, 
-                                 b=50.0,
+                                 b=25.0,
                                  l0=0.65,
                                  r_min=0.3,
                                  r_max=0.75,
@@ -599,8 +603,8 @@ if __name__ == "__main__":
                                  u_dim=2)
 
     # declare control parameters
-    control_params = PredictiveControlParams(N=20, 
-                                             dt=0.001, 
+    control_params = PredictiveControlParams(N=250, 
+                                             dt=0.005, 
                                              K=100,
                                              interp='Z')
 
@@ -643,56 +647,48 @@ if __name__ == "__main__":
                                                  cov=cov_initial,
                                                  lb=lb_initial,
                                                  ub=ub_initial)
-
+    
     # create a predictive controller object
     ctrl = PredictiveController(mdrom, system_params, control_params, distribution_params)
-    # t0 = time.time()
-    # U = ctrl.sample_input_trajectory()
-    # tf = time.time()
-    # print('Sampling time: ', tf - t0)
-
-    # plot the trajectory
-    # plt.figure()
-    # plt.plot(U[0, :], U[1, :], 'r.')
-    # plt.plot(U[0, :], 'r.')
-    # plt.plot(U[1, :], 'b.')
-    # plt.grid()
-    # plt.axis('equal')
-    # plt.show()
-
-    X_des = ctrl.generate_reference_trajectory(np.array([[0.0], [0.67], [0.0], [0.0]]), 0.75, 0.5)
     
-    # # initial conditions
-    # x0_com = np.array([[0.], # px [m]
-    #                    [0.67], # pz [m]
-    #                    [2],  # vx [m/s]
-    #                    [.0]]) # vz [m/s]
-    # p_foot = np.array([[None],  # px [m]
-    #                    [None]]) # pz [m]
-    # D0 = 'F'
+    # INITIAL CONDITIONS
+    x0_com = np.array([[0.], # px [m]
+                       [0.67], # pz [m]
+                       [2],  # vx [m/s]
+                       [.0]]) # vz [m/s]
+    p_foot = np.array([[None],  # px [m]
+                       [None]]) # pz [m]
+    D0 = 'F'
 
-    # # CONSTANT INPUT
-    # u_constant = np.array([[system_params.l0 * 1.0], # left leg
-    #                        [0.0]]) # right leg
-    # U = np.tile(u_constant, (1, control_params.N-1))
+    # GENERATE REFERENCE TRAJECTORY
+    vx_des = 0.75
+    pz_des = 0.5
+    X_des = ctrl.generate_reference_trajectory(x0_com, pz_des, vx_des)
 
-    # # run the simulation
-    # t0 = time.time()
-    # t, x_com, x_leg, p_foot, D = mdrom.RK3_rollout(x0_com, p_foot, U, D0)
-    # tf = time.time()
-    # print('Simulation time: ', tf - t0)
+    # CONSTANT INPUT
+    u_constant = np.array([[system_params.l0 * 1.0], # left leg
+                           [0.0]]) # right leg
+    U = np.tile(u_constant, (1, control_params.N-1))
 
-    # # print(t.shape)
-    # # print(x_com.shape)
-    # # print(x_left.shape)
-    # # print(x_right.shape)
-    # # print(p_left.shape)
-    # # print(p_right.shape)
-    # # print(len(D))
+    # RUN THE SIMULATION
+    t0 = time.time()
+    sol = mdrom.RK3_rollout(x0_com, p_foot, U, D0)
+    tf = time.time()
+    print('Simulation time: ', tf - t0)
 
-    # # save the data into CSV files
-    # np.savetxt('./data/single/time.csv', t, delimiter=',')
-    # np.savetxt('./data/single/state_com.csv', x_com.T, delimiter=',')
-    # np.savetxt('./data/single/state_leg.csv', x_leg.T, delimiter=',')
-    # np.savetxt('./data/single/pos_foot.csv', p_foot.T, delimiter=',')
-    # np.savetxt('./data/single/domain.csv', D, delimiter=',', fmt='%s')
+    # COST FUNCTION
+
+
+    # unpack the solution
+    t = sol[0]
+    x_com = sol[1]
+    x_leg = sol[2]
+    p_foot = sol[3]
+    D = sol[4]
+
+    # save the data into CSV files
+    np.savetxt('./data/single/time.csv', t, delimiter=',')
+    np.savetxt('./data/single/state_com.csv', x_com.T, delimiter=',')
+    np.savetxt('./data/single/state_leg.csv', x_leg.T, delimiter=',')
+    np.savetxt('./data/single/pos_foot.csv', p_foot.T, delimiter=',')
+    np.savetxt('./data/single/domain.csv', D, delimiter=',', fmt='%s')
