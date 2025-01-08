@@ -190,6 +190,7 @@ class MDROM:
         xk_com = x0_com
         Dk = D0
         contacts = self.contact_identification(D0)
+        viability = True
         for i in range(0, N-1):
             # intermmidiate times
             tk = i * dt
@@ -257,7 +258,7 @@ class MDROM:
             D[i+1] = Dk
 
         # package into a solution
-        sol = (Tx, xt_com, xt_leg, pt_foot, D)
+        sol = (Tx, xt_com, xt_leg, pt_foot, D, viability)
 
         return sol
     
@@ -281,16 +282,16 @@ class MDROM:
             r = u[0]
             theta = u[1]
 
-            # temporary raibert heuristic
-            px = p_com[0]
-            px_des = 0.1
+            # # temporary raibert heuristic
+            # px = p_com[0]
+            # px_des = 0.1
 
-            vel = v_com[0]
-            vel_des = 0.0
-            kp = 0.0
-            kd = 0.2
-            theta = -kp * (px - px_des) - kd * (vel - vel_des)
-            theta = theta[0] 
+            # vel = v_com[0]
+            # vel_des = 0.0
+            # kp = 0.0
+            # kd = 0.2
+            # theta = -kp * (px - px_des) - kd * (vel - vel_des)
+            # theta = theta[0] 
 
             # pack into state vectors
             x_leg = np.array([[r],
@@ -589,33 +590,41 @@ class PredictiveController:
         # X_leg = sol[2]
         # P_foot = sol[3]
         # D = sol[4]
+        viability = sol[5]
 
-        # unpack some cost parameters
-        Q = self.ctrl_params.Q
-        Qf = self.ctrl_params.Qf
+        # if the pendulum falls assign infinite cost
+        if viability == False:
+            total_cost = np.inf
 
-        # stage cost
-        state_cost = 0.0
-        for i in range(0, self.N-1):
-            # compute error
-            xi_com = X_com[:, i]   
-            xi_com_des = X_com_des[:, i]
-            e_com = (xi_com - xi_com_des).reshape(4, 1)
+        # viable solution, compute the cost
+        elif viability == True:
+            # unpack some cost parameters
+            Q = self.ctrl_params.Q
+            Qf = self.ctrl_params.Qf
 
-            # compute cost
-            cost = e_com.T @ Q @ e_com
-            state_cost += cost
+            # stage cost
+            state_cost = 0.0
+            for i in range(0, self.N-1):
+                # compute error
+                xi_com = X_com[:, i]   
+                xi_com_des = X_com_des[:, i]
+                e_com = (xi_com - xi_com_des).reshape(4, 1)
 
-        # terminal cost
-        xf_com = X_com[:, self.N-1]
-        xf_com_des = X_com_des[:, self.N-1]
-        ef_com = (xf_com - xf_com_des).reshape(4, 1)
-        terminal_cost = ef_com.T @ Qf @ ef_com
+                # compute cost
+                cost = e_com.T @ Q @ e_com
+                state_cost += cost
 
-        # total cost
-        total_cost = state_cost + terminal_cost
-        
-        return total_cost[0][0]
+            # terminal cost
+            xf_com = X_com[:, self.N-1]
+            xf_com_des = X_com_des[:, self.N-1]
+            ef_com = (xf_com - xf_com_des).reshape(4, 1)
+            terminal_cost = ef_com.T @ Qf @ ef_com
+
+            # total cost
+            total_cost = state_cost + terminal_cost
+            total_cost = total_cost[0][0]
+
+        return total_cost
     
     # perform horizon rollouts
     def monte_carlo(self, x0, p_foot, D0):
@@ -626,19 +635,20 @@ class PredictiveController:
         S_list = [None for _ in range(self.K)]    # solution list
 
         # generate the reference trajectory
-        vx_des = 0.25
-        pz_des = 0.72
+        vx_des = 0.00
+        pz_des = 0.70
         X_des = self.generate_reference_trajectory(x0, pz_des, vx_des)
 
         # perform the rollouts
         for k in range(0, self.K):
+            print('Rollout: ', k)
             # sample an input trajectory
             U = self.sample_input_trajectory()
             
             # rollout the dynamics under the input trajectory
             S = self.mdrom.RK3_rollout(x0, p_foot, U, D0)
 
-            # evaluate the cost function
+            # evaluate the cost function, no failure, compute cost
             J = self.cost_function(X_des, S)
 
             # save the data
@@ -654,6 +664,28 @@ class PredictiveController:
         S_list = [S_list[i] for i in idx]
 
         return S_list, U_list, J_list
+    
+    # perfomr sampling based predictive control
+    def predictive_control(self, x0, p_foot, D0):
+        """
+        Perform sampling predictive control
+        """
+        # perform the monte carlo simulation        
+        S_list, U_list, J_list = ctrl.monte_carlo(x0_com, p_foot, D0)
+
+        # reorder the rollouts based on cost
+        S_star = S_list[0]
+        U_star = U_list[:, :, 0]
+        J_star = J_list[0]
+
+        # unpack the solution
+        t = S_star[0]
+        x_com = S_star[1]
+        x_leg = S_star[2]
+        p_foot = S_star[3]
+        D = S_star[4]
+
+        return t, x_com, x_leg, p_foot, D, J_star
 
 #######################################################################
 # MAIN
@@ -665,7 +697,7 @@ if __name__ == "__main__":
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=5000.0, 
-                                 b=25.0,
+                                 b=250.0,
                                  l0=0.65,
                                  r_min=0.3,
                                  r_max=0.75,
@@ -679,7 +711,7 @@ if __name__ == "__main__":
     Qf = np.diag(Qf_diags)
     control_params = PredictiveControlParams(N=45, 
                                              dt=0.02, 
-                                             K=500,
+                                             K=750,
                                              interp='Z',
                                              Q=Q,
                                              Qf=Qf)
@@ -730,24 +762,17 @@ if __name__ == "__main__":
     # INITIAL CONDITIONS
     x0_com = np.array([[0.], # px [m]
                        [0.67], # pz [m]
-                       [1],  # vx [m/s]
-                       [1]]) # vz [m/s]
+                       [0],  # vx [m/s]
+                       [0]]) # vz [m/s]
     p_foot = np.array([[None],  # px [m]
                        [None]]) # pz [m]
     D0 = 'F'
 
-    S_list, U_list, J_list = ctrl.monte_carlo(x0_com, p_foot, D0)
-
-    S_star = S_list[0]
-    U_star = U_list[:, :, 0]
-    J_star = J_list[0]
-
-    # unpack the solution
-    t = S_star[0]
-    x_com = S_star[1]
-    x_leg = S_star[2]
-    p_foot = S_star[3]
-    D = S_star[4]
+    # preditive control
+    t0 = time.time()
+    t, x_com, x_leg, p_foot, D, J = ctrl.predictive_control(x0_com, p_foot, D0)
+    tf = time.time()
+    print('Elapsed time: ', tf - t0)
 
     # save the data into CSV files
     np.savetxt('./data/single/time.csv', t, delimiter=',')
