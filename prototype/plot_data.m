@@ -43,7 +43,7 @@ end
 plot_states = 0;
 
 % animate the trajectory
-rt = 1.0; % realtime rate
+rt = 0.1; % realtime rate
 animate = 1;
 replays = 3;
 

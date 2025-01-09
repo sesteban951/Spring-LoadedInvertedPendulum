@@ -32,7 +32,7 @@ distr.cov_min = 0.1;                            % keep the diagonals above this 
 
 % simulation parameters
 rt = 0.1; % real time rate
-n_replays = 3;
+n_replays = 10;
 
 % initial conditions
 x0 = [0.2;    % inital position 

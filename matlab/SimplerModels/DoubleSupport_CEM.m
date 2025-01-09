@@ -159,7 +159,7 @@ end
 % plot the distribution history
 if plot_pdf == 1
 
-    pause(1);
+    pause(3);
 
     if distr.type == 'G' 
         % for plotting the dsitribution
