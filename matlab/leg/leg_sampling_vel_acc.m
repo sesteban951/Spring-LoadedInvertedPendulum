@@ -4,7 +4,7 @@
 clear all; close all; clc; 
 
 % distribution parameters
-distr.type = 'U';
+distr.type = 'G';
 distr.bounds = [-1.0, 1.0;     % velocity rate bounds
                 -1.0, 1.0];  
 distr.mean = [0.0;
@@ -28,7 +28,10 @@ sys.thetadot_max = 0.5;
 
 tot_time = ctrl.dt * (ctrl.N + 1); % real time rate
 tspan = 0:0.01:tot_time;
+
+tic;
 U = sample_input(ctrl, distr, sys);
+disp(['Sampling time: ', num2str(toc), ' s']);
 
 % single integrator dynamics
 x0 = [sys.r_nom;  % leg length
@@ -56,8 +59,8 @@ figure;
 subplot(3, 2, 1);
 hold on;
 plot(t, r, 'b', 'LineWidth', 2);
-yline(sys.r_min);
-yline(sys.r_max);
+% yline(sys.r_min);
+% yline(sys.r_max);
 xlabel('Time (s)');
 ylabel('length (m)');
 yline(0.65);
@@ -66,8 +69,8 @@ grid on;
 subplot(3, 2, 3);
 hold on;
 plot(t, theta_deg, 'r', 'LineWidth', 2);
-yline(rad2deg(sys.theta_min));
-yline(rad2deg(sys.theta_max));
+% yline(rad2deg(sys.theta_min));
+% yline(rad2deg(sys.theta_max));
 xlabel('Time (s)');
 ylabel('angle (deg)');
 yline(0);
