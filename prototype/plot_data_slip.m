@@ -18,6 +18,7 @@ fclose(fileID);
 % system state
 p_com = x_sys(:,1:2);
 v_com = x_sys(:,3:4);
+q_leg = x_sys(:,5:6);
 
 % leg states
 r = x_leg(:,1);
@@ -37,21 +38,18 @@ for i = 1:length(t)
 end
 
 % convert the domains to int
-domain_int = zeros(length(domain), 1);
+domain_int = zeros(length(domain),1);
 for i = 1:length(domain)
     if domain(i) == 'F'
-        domain_int(i) = 0;
-    elseif domain(i) == 'G'
         domain_int(i) = 1;
+    elseif domain(i) == 'G'
+        domain_int(i) = 0;
     end
 end
 
-% plot the state
 plot_states = 0;
-
-% animate the trajectory
 animate = 1;
-rt = 0.25; % realtime rate
+rt = 0.05; % realtime rate
 replays = 1;
 plot_com = 0;
 plot_foot = 0;
@@ -98,6 +96,7 @@ if plot_states == 1
     % LEG STATES
     subplot(3,6,3);
     hold on; grid on;
+    plot(t, q_leg(:,1), 'LineWidth', 1.5);
     plot(t, r, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$r$ [m]', 'Interpreter', 'latex');
@@ -105,6 +104,7 @@ if plot_states == 1
 
     subplot(3,6,4);
     hold on; grid on;
+    plot(t, q_leg(:,2), 'LineWidth', 1.5);
     plot(t, theta, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$\theta$ [rad]', 'Interpreter', 'latex');
@@ -180,8 +180,7 @@ if plot_states == 1
     title('Domain');
     ylim([-0.5, 3.5]);
     yticks([0, 1]);
-    yticklabels({'F', 'G'});
-
+    yticklabels({'G', 'F'});
 
 end
 

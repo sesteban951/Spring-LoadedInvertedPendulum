@@ -212,15 +212,11 @@ class MDROM:
         viability = True
         for i in range(0, N-1):
 
-            # print(i)
-
             # intermmidiate times
             tk = i * dt
             t1 = tk
             t2 = tk + dt/2
             t3 = tk + dt
-
-            print('-------------------------------------------------- t:', tk)
 
             # get the intermmediate inputs
             u1 = self.interpolate_control_input(t1, Tu, U)
@@ -243,7 +239,7 @@ class MDROM:
 
             # RK3 step and update all states
             xk_sys = xk_sys + (dt/6) * (f1 + 4*f2 + f3)
-            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u1, Dk)
+            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u2, Dk)
 
             # check if hit switching surfaces and update state if needed
             checked_contacts = self.check_switching(xk_sys, xk_leg, contacts)
@@ -251,8 +247,6 @@ class MDROM:
             # if a change in contact detected
             if checked_contacts != contacts:
                 
-                print('Contact change detected, updating states...')
-
                 # check if the take off state is viable
                 # TODO: should I add viability w.r.t. to friction cone?
                 if (contacts==True) and (checked_contacts==False):
@@ -264,12 +258,11 @@ class MDROM:
                         print('Exited the viability kernel, exited rollout...')
                         break
 
-                print('Viability kernel check passed, continuing...')
-
                 # update the feet positions
                 p_foot = self.apply_reset(xk_sys, xk_leg, p_foot, checked_contacts)
-                # TODO: also apply reset to all the other states as well
-                
+                xk_sys[4] = xk_leg[0]
+                xk_sys[5] = xk_leg[1]
+
                 # update domain and contact info
                 Dk = self.domain_identification(checked_contacts)
                 contacts = checked_contacts
@@ -387,10 +380,10 @@ class MDROM:
 
         # update the foot state
         x_foot = np.array([[px_foot],       
-                        [pz_foot],
-                        [vx_foot],
-                        [vz_foot]])
-
+                           [pz_foot],
+                           [vx_foot],
+                           [vz_foot]])
+   
         return x_foot
 
     #################################  SWITCHING  #################################
@@ -751,21 +744,21 @@ if __name__ == "__main__":
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=5000.0, 
-                                 b=5.0,
+                                 b=100.0,
                                  l0=0.65,
-                                 r_min=0.3,
-                                 r_max=0.75,
+                                 r_min=0.4,
+                                 r_max=0.8,
                                  theta_min=-np.pi/3,
                                  theta_max=np.pi/3,
                                  rdot_lim=0.75,
-                                 thetadot_lim=np.pi/3)
+                                 thetadot_lim=np.pi)
 
     # declare control parameters
     Q_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Q = np.diag(Q_diags)
     Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=200, 
+    control_params = PredictiveControlParams(N=150, 
                                              dt=0.005, 
                                              K=1500,
                                              interp='L',
@@ -778,8 +771,8 @@ if __name__ == "__main__":
     # create parametric distribution parameters
     mean_r = 0.0          # [m/s]
     mean_theta = 0.0      # [rad/s]
-    std_dev_r = 0.75      # [m/s]
-    std_dev_theta = 1.0   # [rad/s]
+    std_dev_r = 1.5      # [m/s]
+    std_dev_theta = 20.0   # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -817,17 +810,17 @@ if __name__ == "__main__":
 
     # initial conditions
     x0_sys = np.array([[0.0],  # px com
-                       [1.0], # pz com
-                       [0.1],  # vx com
-                       [-2],  # vz com
+                       [0.8],  # pz com
+                       [0],  # vx com
+                       [0],   # vz com
                        [system_params.l0],  # l0 command
                        [0.0]]) # theta command
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
-    # U = ctrl.sample_input_trajectory()
-    u = np.array([[0.], [0.]])
-    U = np.tile(u, (1, control_params.N-1))
+    U = ctrl.sample_input_trajectory()
+    # u = np.array([[0.25], [0.25]])
+    # U = np.tile(u, (1, control_params.N-1))
 
     sol = mdrom.RK3_rollout(x0_sys, p0_foot, U, D0)
     
