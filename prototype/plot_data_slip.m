@@ -8,6 +8,7 @@ t = load('./data/slip/time.csv');
 x_sys = load('./data/slip/state_com.csv');
 x_leg = load('./data/slip/state_leg.csv');
 x_foot = load('./data/slip/state_foot.csv');
+lambd = load('./data/slip/lambd.csv');
 u = load('./data/slip/input.csv');
 fileID = fopen('./data/slip/domain.csv', 'r');
 domain = textscan(fileID, '%s', 'Delimiter', ',');
@@ -28,6 +29,13 @@ thetadot = x_leg(:,4);
 p_foot = x_foot(:,1:2);
 v_foot = x_foot(:,3:4);
 
+% compute lambda magnitude
+lambda_mag = zeros(length(t), 1);
+for i = 1:length(t)
+    lam = lambd(i,1:2);
+    lambda_mag(i) = norm(lam, 2);
+end
+
 % convert the domains to int
 domain_int = zeros(length(domain), 1);
 for i = 1:length(domain)
@@ -43,7 +51,7 @@ plot_states = 0;
 
 % animate the trajectory
 animate = 1;
-rt = 0.1; % realtime rate
+rt = 0.25; % realtime rate
 replays = 1;
 plot_com = 0;
 plot_foot = 0;
@@ -53,7 +61,6 @@ plot_foot = 0;
 if plot_states == 1
     % plot all states
     figure('Name', 'COM States', 'WindowState', 'maximized');
-    set(0, 'DefaultFigureRenderer', 'painters');
 
     % COM STATES
     subplot(3,6,1);
@@ -123,27 +130,49 @@ if plot_states == 1
     xlabel('Time [sec]');
     ylabel('$p_{foot,x}$ [m]', 'Interpreter', 'latex');
     title('Foot x-pos');
+    grid on;
 
     subplot(3,6,6);
     plot(t, p_foot(:,2), 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$p_{foot,z}$ [m]', 'Interpreter', 'latex');
     title('Foot z-pos');
+    grid on;
 
     subplot(3,6,11);
     plot(t, v_foot(:,1), 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$v_{foot,x}$ [m/s]', 'Interpreter', 'latex');
     title('Foot x-vel');
+    grid on;
 
     subplot(3,6,12);
     plot(t, v_foot(:,2), 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$v_{foot,z}$ [m/s]', 'Interpreter', 'latex');
     title('Foot z-vel');
+    grid on;
+
+    % LAMBDA
+    subplot(3,6,[13,14]);
+    plot(t, lambda_mag, 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$\lambda$ [N]', 'Interpreter', 'latex');
+    title('Lambda Magnitude');
+    grid on;
+
+    % INPUT
+    subplot(3,6,[15,16]); 
+    hold on; grid on;
+    plot(t(1:end-1), u(:,1), 'LineWidth', 2);
+    plot(t(1:end-1), u(:,2), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('Input');
+    title('l0 rate input');
+    grid on;
 
     % DOMAIN
-    subplot(3,6,[13:14]);
+    subplot(3,6,[17:18]);
     hold on; grid on;
     stairs(t, domain_int, 'LineWidth', 2);
     xlabel('Time [sec]');
@@ -153,18 +182,7 @@ if plot_states == 1
     yticks([0, 1]);
     yticklabels({'F', 'G'});
 
-    % INPUT
-    subplot(3,6,[15,16]);
-    plot(t(1:end-1), u(:,1), 'LineWidth', 2);
-    xlabel('Time [sec]');
-    ylabel('Input');
-    title('l0 rate input');
 
-    subplot(3,6,[17,18]);
-    plot(t(1:end-1), u(:,2), 'LineWidth', 2);
-    xlabel('Time [sec]');
-    ylabel('Input');
-    title('theta rate input');
 end
 
 % %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -173,7 +191,6 @@ end
 if animate == 1
 
     figure('Name', 'Animation');
-    set(0, 'DefaultFigureRenderer', 'painters');
     hold on;
 
     xline(0);

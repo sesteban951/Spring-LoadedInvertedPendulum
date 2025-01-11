@@ -51,9 +51,9 @@ class ParametricDistribution:
     lb: np.array         # lower bound of the distribution (Uniform only)
     ub: np.array         # upper bound of the distribution (Uniform only)
 
-#######################################################################
+###################################################################################################
 # DYNAMICS
-#######################################################################
+###################################################################################################
 
 class MDROM:
     """
@@ -188,35 +188,39 @@ class MDROM:
         xt_sys = np.zeros((6, N))
         xt_leg = np.zeros((4, N))
         xt_foot = np.zeros((4, N))
+        lambd_t = np.zeros((2, N))
         D = [None for _ in range(N)]
 
         # compute leg state
-        x0_leg = self.update_leg_state(x0_sys, p0_foot, U[:, 0], D0)
+        x0_leg, lambd = self.update_leg_state(x0_sys, p0_foot, U[:, 0], D0)
         x0_foot = self.update_foot_state(x0_sys, x0_leg, p0_foot, D0)
 
         # initial conditions
         xt_sys[:, 0] = x0_sys.reshape(6) 
         xt_leg[:, 0] = x0_leg.reshape(4)
         xt_foot[:, 0] = x0_foot.reshape(4)
+        lambd_t[:, 0] = lambd.reshape(2)  
         D[0] = D0
 
         # RK3 integration
         xk_sys = x0_sys
         xk_leg = x0_leg
-        # xk_foot = x0_foot
+        xk_foot = x0_foot
         p_foot = p0_foot
         Dk = D0
         contacts = self.contact_identification(D0)
         viability = True
         for i in range(0, N-1):
 
-            print(i)
+            # print(i)
 
             # intermmidiate times
             tk = i * dt
             t1 = tk
             t2 = tk + dt/2
             t3 = tk + dt
+
+            print('-------------------------------------------------- t:', tk)
 
             # get the intermmediate inputs
             u1 = self.interpolate_control_input(t1, Tu, U)
@@ -239,7 +243,7 @@ class MDROM:
 
             # RK3 step and update all states
             xk_sys = xk_sys + (dt/6) * (f1 + 4*f2 + f3)
-            xk_leg = self.update_leg_state(xk_sys, p_foot, u1, Dk)
+            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u1, Dk)
 
             # check if hit switching surfaces and update state if needed
             checked_contacts = self.check_switching(xk_sys, xk_leg, contacts)
@@ -264,6 +268,7 @@ class MDROM:
 
                 # update the feet positions
                 p_foot = self.apply_reset(xk_sys, xk_leg, p_foot, checked_contacts)
+                # TODO: also apply reset to all the other states as well
                 
                 # update domain and contact info
                 Dk = self.domain_identification(checked_contacts)
@@ -272,18 +277,15 @@ class MDROM:
             # store the states
             xt_sys[:, i+1] = xk_sys.reshape(6)
             xt_leg[:, i+1] = xk_leg.reshape(4)
-            xt_foot[:, i+1] = self.update_foot_state(xt_sys, xk_leg, p_foot, Dk).flatten()
-            
-            # store the foot positions
-            # if Dk == 'F':
-            # elif Dk == 'G':
-            #     xk_foot[:, i+1] = p_foot.reshape(2)
+            xk_foot = self.update_foot_state(xk_sys, xk_leg, p_foot, Dk).flatten()
+            xt_foot[:, i+1] = xk_foot
+            lambd_t[:, i+1] = lambd.reshape(2)
 
             # store the domain
             D[i+1] = Dk
 
         # package into a solution
-        sol = (Tx, xt_sys, xt_leg, xt_foot, D, viability)
+        sol = (Tx, xt_sys, xt_leg, xt_foot, lambd_t, D, viability)
 
         return sol
 
@@ -301,6 +303,9 @@ class MDROM:
             theta = x_sys[5][0]
             rdot = u[0]
             thetadot = u[1]
+
+            # compute leg force
+            lambd = np.array([[0], [0]])
 
             # pack into state vectors
             x_leg = np.array([[r],
@@ -332,13 +337,17 @@ class MDROM:
             theta = -np.arctan2(r_x, -r_z)
             thetadot = (r_z * rdot_x - r_x * rdot_z) / r
 
+            # compute leg force
+            l0_hat = x_sys[4][0]
+            lambd = -r_hat * (self.k * (l0_hat - r) + self.b * rdot)
+
             # pack into state vectors
             x_leg = np.array([[r],
                               [theta[0]],
                               [rdot[0][0]],
                               [thetadot[0]]])
 
-        return x_leg
+        return x_leg, lambd
 
     # compute foot position and veclocity in world
     def update_foot_state(self, x_sys, x_leg, p_foot, D):
@@ -346,8 +355,10 @@ class MDROM:
         Get the foot state in the world frame. Usefull for checking switching surfaces
         and recording history of foot locations
         """
+
         # pin the foot
         if D == 'G':
+
             px_foot = p_foot[0][0]
             pz_foot = p_foot[1][0]
             vx_foot = 0.0
@@ -355,6 +366,7 @@ class MDROM:
 
         # in swing
         elif D == 'F':
+
             # get the com state
             px_com = x_sys[0][0]
             pz_com = x_sys[1][0]
@@ -375,10 +387,10 @@ class MDROM:
 
         # update the foot state
         x_foot = np.array([[px_foot],       
-                           [pz_foot],
-                           [vx_foot],
-                           [vz_foot]])
-           
+                        [pz_foot],
+                        [vx_foot],
+                        [vz_foot]])
+
         return x_foot
 
     #################################  SWITCHING  #################################
@@ -438,10 +450,11 @@ class MDROM:
         # get relevant states
         r = x_leg[0]
         rdot = x_leg[2]
+        l0_hat = x_sys[4][0]
 
         # check the switching surface conditions
-        # nom_length = (r >= u_leg)        # the leg is at its nominal uncompressed length
-        nom_length = (r >= self.l0)        # the leg is at its nominal uncompressed length
+        # nom_length = (r >= self.l0)        # the leg is at its nominal uncompressed length
+        nom_length = (r >= l0_hat)         # the leg is at its nominal uncompressed length
         pos_vel = (rdot >= 0.0)            # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel   # if true, leg has taken off into flight
 
@@ -536,9 +549,9 @@ class MDROM:
         
         return contact
 
-#######################################################################
+###################################################################################################
 # SAMPLING PREDICTIVE CONTROL
-#######################################################################
+###################################################################################################
 
 class PredictiveController:
     """
@@ -738,7 +751,7 @@ if __name__ == "__main__":
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=5000.0, 
-                                 b=250.0,
+                                 b=5.0,
                                  l0=0.65,
                                  r_min=0.3,
                                  r_max=0.75,
@@ -752,8 +765,8 @@ if __name__ == "__main__":
     Q = np.diag(Q_diags)
     Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=50, 
-                                             dt=0.02, 
+    control_params = PredictiveControlParams(N=200, 
+                                             dt=0.005, 
                                              K=1500,
                                              interp='L',
                                              Q=Q,
@@ -804,39 +817,40 @@ if __name__ == "__main__":
 
     # initial conditions
     x0_sys = np.array([[0.0],  # px com
-                       [0.75], # pz com
-                       [1.0],  # vx com
-                       [3.0],  # vz com
+                       [1.0], # pz com
+                       [0.1],  # vx com
+                       [-2],  # vz com
                        [system_params.l0],  # l0 command
                        [0.0]]) # theta command
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
-    U = ctrl.sample_input_trajectory()
-    sol = mdrom.RK3_rollout(x0_sys, p0_foot, U, D0)
+    # U = ctrl.sample_input_trajectory()
+    u = np.array([[0.], [0.]])
+    U = np.tile(u, (1, control_params.N-1))
 
-    #(Tx, xt_sys, xt_leg, xt_foot, D, viability)
+    sol = mdrom.RK3_rollout(x0_sys, p0_foot, U, D0)
+    
     t = sol[0]
     x_sys = sol[1]
     x_leg = sol[2]
     x_foot = sol[3]
-    d = sol[4]
-    viability = sol[5]
+    lambd = sol[4]
+    d = sol[5]
+    viability = sol[6]
 
     print(t.shape)
     print(x_sys.shape)
     print(x_leg.shape)
     print(x_foot.shape)
+    print(lambd.shape)
     print(len(d))
     print(viability)
 
-    # save the data into CSV files
-            #     xk_foot[:, i+1] = self.update_foot_state(xt_sys, xk_leg, p_foot, pz_zero=False).flatten()
-            # elif Dk == 'G':
-            #     xk_foot[:, i+1] = p_foot.reshape(2)
     np.savetxt('./data/slip/time.csv', t, delimiter=',')
     np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
     np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
     np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
+    np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
     np.savetxt('./data/slip/input.csv', U.T, delimiter=',')
     np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')
