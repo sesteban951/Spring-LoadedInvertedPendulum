@@ -107,6 +107,7 @@ class MDROM:
                               [-g]])
             v_leg = np.array([[u[0]],
                               [u[1]]])
+
             xdot = np.vstack((v_com, a_com, v_leg))
 
         # Ground stance domain (G)
@@ -122,18 +123,19 @@ class MDROM:
 
             # compute passive leg angle
             rdot_vec = -v_com
-            rdot_x = rdot_vec[0]
-            rdot_z = rdot_vec[1]
+            rdot_x = rdot_vec[0][0]
+            rdot_z = rdot_vec[1][0]
             thetadot_hat = r_hat.T @ np.array([[rdot_x], [-rdot_z]])
 
             # compute the groundreaction force
-            lambd = -(r_hat/m) * (k * (l0_hat - r_norm) + b * (v_com.T @ r_hat))
+            lambd = -r_hat * (k * (l0_hat - r_norm) + b * (v_com.T @ r_hat))
 
             # compute the dynamics
-            a_com = lambd + np.array([[0], [-g]])
+            a_com = (1/m) * lambd + np.array([[0], [-g]])
             v_leg = np.array([[u[0]],
-                              [thetadot_hat]])
-            xdot = np.vstack((v_com, a_com))
+                              [thetadot_hat[0][0]]])
+
+            xdot = np.vstack((v_com, a_com, v_leg))
 
         return xdot
 
@@ -185,24 +187,31 @@ class MDROM:
         Tu = np.arange(0, N-1) * dt
         xt_sys = np.zeros((6, N))
         xt_leg = np.zeros((4, N))
-        pt_foot = np.zeros((2, N))
+        xt_foot = np.zeros((4, N))
         D = [None for _ in range(N)]
 
         # compute leg state
+        x0_leg = self.update_leg_state(x0_sys, p0_foot, U[:, 0], D0)
+        x0_foot = self.update_foot_state(x0_sys, x0_leg, p0_foot, D0)
 
         # initial conditions
         xt_sys[:, 0] = x0_sys.reshape(6) 
-        pt_foot[:, 0] = p0_foot.reshape(2)
+        xt_leg[:, 0] = x0_leg.reshape(4)
+        xt_foot[:, 0] = x0_foot.reshape(4)
         D[0] = D0
 
         # RK3 integration
         xk_sys = x0_sys
-        # xk_leg = x0_leg
+        xk_leg = x0_leg
+        # xk_foot = x0_foot
         p_foot = p0_foot
         Dk = D0
         contacts = self.contact_identification(D0)
         viability = True
         for i in range(0, N-1):
+
+            print(i)
+
             # intermmidiate times
             tk = i * dt
             t1 = tk
@@ -231,19 +240,19 @@ class MDROM:
             # RK3 step and update all states
             xk_sys = xk_sys + (dt/6) * (f1 + 4*f2 + f3)
             xk_leg = self.update_leg_state(xk_sys, p_foot, u1, Dk)
-            print(xk_sys)
-            print(xk_leg)
-            exit(0)
 
             # check if hit switching surfaces and update state if needed
-            checked_contacts = self.check_switching(xk_sys, xk_leg, u1, contacts)
-            
+            checked_contacts = self.check_switching(xk_sys, xk_leg, contacts)
+
             # if a change in contact detected
             if checked_contacts != contacts:
                 
+                print('Contact change detected, updating states...')
+
                 # check if the take off state is viable
-                # TODO: should I check viability of the touch down?
+                # TODO: should I add viability w.r.t. to friction cone?
                 if (contacts==True) and (checked_contacts==False):
+                    # check viability condition
                     viability = self.in_viability_kernel(xk_sys, xk_leg)
                     
                     # you're going to die, exit the for loop
@@ -251,44 +260,40 @@ class MDROM:
                         print('Exited the viability kernel, exited rollout...')
                         break
 
+                print('Viability kernel check passed, continuing...')
+
                 # update the feet positions
-                p_foot = self.apply_reset(xk_sys, xk_leg, checked_contacts)
+                p_foot = self.apply_reset(xk_sys, xk_leg, p_foot, checked_contacts)
                 
                 # update domain and contact info
                 Dk = self.domain_identification(checked_contacts)
                 contacts = checked_contacts
 
             # store the states
-            xt_sys[:, i+1] = xt_sys.reshape(4)
+            xt_sys[:, i+1] = xk_sys.reshape(6)
             xt_leg[:, i+1] = xk_leg.reshape(4)
+            xt_foot[:, i+1] = self.update_foot_state(xt_sys, xk_leg, p_foot, Dk).flatten()
             
             # store the foot positions
-            if Dk == 'F':
-                pt_foot[:, i+1] = self.get_foot_state_in_world(xt_sys, xk_leg, pz_zero=False).flatten()
-            elif Dk == 'G':
-                pt_foot[:, i+1] = p_foot.reshape(2)
+            # if Dk == 'F':
+            # elif Dk == 'G':
+            #     xk_foot[:, i+1] = p_foot.reshape(2)
 
             # store the domain
             D[i+1] = Dk
 
         # package into a solution
-        sol = (Tx, xt_sys, xt_leg, pt_foot, D, viability)
+        sol = (Tx, xt_sys, xt_leg, xt_foot, D, viability)
 
         return sol
-    
-    #################################  STATE UPDATES  #################################
+
+    #################################  LEG STATE UPDATES  #################################
 
     # update leg polar state
     def update_leg_state(self, x_sys, p_foot, u, D):
         """
         Update the leg state based on the COM state and control input
         """
-        # unpack COM state
-        p_com = np.array([[x_sys[0]],  
-                          [x_sys[1]]]).reshape(2, 1)
-        v_com = np.array([[x_sys[2]],
-                          [x_sys[3]]]).reshape(2, 1)
-
         # in flight (state governed by input)
         if D == 'F':
             # build the state
@@ -296,8 +301,6 @@ class MDROM:
             theta = x_sys[5][0]
             rdot = u[0]
             thetadot = u[1]
-
-            print(r, theta, rdot, thetadot)
 
             # pack into state vectors
             x_leg = np.array([[r],
@@ -307,6 +310,11 @@ class MDROM:
         
         # in leg support (leg state governed by dynamics)
         if D == 'G':
+            # unpack COM state
+            p_com = np.array([[x_sys[0]],  
+                              [x_sys[1]]]).reshape(2, 1)
+            v_com = np.array([[x_sys[2]],
+                              [x_sys[3]]]).reshape(2, 1)
 
             # compute relevant vectors
             r_vec = p_foot - p_com
@@ -333,36 +341,50 @@ class MDROM:
         return x_leg
 
     # compute foot position and veclocity in world
-    def get_foot_state_in_world_in_world(self, x_sys, x_leg, pz_zero):
+    def update_foot_state(self, x_sys, x_leg, p_foot, D):
         """
         Get the foot state in the world frame. Usefull for checking switching surfaces
         and recording history of foot locations
         """
-        # unpack the states
-        p_com = np.array([[x_sys[0]],
-                          [x_sys[1]]]).reshape(2, 1)
-        
-        # get the leg state
-        r = x_leg[0][0]
-        theta = x_leg[1][0]
+        # pin the foot
+        if D == 'G':
+            px_foot = p_foot[0][0]
+            pz_foot = p_foot[1][0]
+            vx_foot = 0.0
+            vz_foot = 0.0
 
-        # foot position in world frame frame 
-        px_foot_W = p_com[0][0] - r * np.sin(theta)
-        
-        if pz_zero == True:
-            pz_foot_W = 0.0
-        else:
-            pz_foot_W = p_com[1][0] -r * np.cos(theta)
-        
-        p_foot_W = np.array([[px_foot_W],
-                             [pz_foot_W]]).reshape(2, 1)
+        # in swing
+        elif D == 'F':
+            # get the com state
+            px_com = x_sys[0][0]
+            pz_com = x_sys[1][0]
+            vx_com = x_sys[2][0]
+            vz_com = x_sys[3][0]
 
-        return p_foot_W
+            # get the leg state
+            r = x_leg[0][0]
+            theta = x_leg[1][0]
+            rdot = x_leg[2][0]
+            thetadot = x_leg[3][0]
+
+            # foot position in world frame frame 
+            px_foot = px_com - r * np.sin(theta)
+            pz_foot = pz_com - r * np.cos(theta)
+            vx_foot = vx_com - rdot * np.sin(theta) - r * thetadot * np.cos(theta)
+            vz_foot = vz_com - rdot * np.cos(theta) + r * thetadot * np.sin(theta)
+
+        # update the foot state
+        x_foot = np.array([[px_foot],       
+                           [pz_foot],
+                           [vx_foot],
+                           [vz_foot]])
+           
+        return x_foot
 
     #################################  SWITCHING  #################################
 
     # check switching surfaces
-    def check_switching(self, x_sys, x_leg, u, contact):
+    def check_switching(self, x_sys, x_leg, contact):
         """
         Check if the state has hit any switching surfaces
         """
@@ -373,8 +395,7 @@ class MDROM:
         # In Ground(G)
         elif contact == True:
             # check for takeoff
-            u_leg = u[0]
-            contact_result = self.S_TO(x_sys, x_leg, u_leg)
+            contact_result = self.S_TO(x_sys, x_leg)
 
         return contact_result
 
@@ -386,10 +407,10 @@ class MDROM:
         # get relevant states
         pz = x_com[1]
         vz = x_com[3]
-        r = x_leg[0]         # set by input
-        theta = x_leg[1]     # set by input
-        rdot = x_leg[2]      # set by input
-        thetadot = x_leg[3]  # set by input
+        r = x_leg[0]         
+        theta = x_leg[1]     
+        rdot = x_leg[2]      
+        thetadot = x_leg[3]  
  
         # compute the foot position and velocity
         pz_foot = pz - r * np.cos(theta)
@@ -409,8 +430,8 @@ class MDROM:
         return contact
 
     # Take-Off (TO) Switching Surface -- checks individual legs
-    # TODO: consoder switching only when the leg is zero force
-    def S_TO(self, x_com, x_leg, u_leg):
+    # TODO: decide on switching based on force or on l0 and vcom
+    def S_TO(self, x_sys, x_leg):
         """
         Check if a leg has taken off from the ground
         """
@@ -419,11 +440,10 @@ class MDROM:
         rdot = x_leg[2]
 
         # check the switching surface conditions
-        # set by input
-        nom_length = (r >= u_leg)        # the leg is at its nominal uncompressed length
-        # nom_length = (r >= self.l0)      # the leg is at its nominal uncompressed length
-        pos_vel = (rdot >= 0.0)          # the leg is going in uncompressing direction
-        takeoff = nom_length and pos_vel # if true, leg has taken off into flight
+        # nom_length = (r >= u_leg)        # the leg is at its nominal uncompressed length
+        nom_length = (r >= self.l0)        # the leg is at its nominal uncompressed length
+        pos_vel = (rdot >= 0.0)            # the leg is going in uncompressing direction
+        takeoff = nom_length and pos_vel   # if true, leg has taken off into flight
 
         # return the contact result
         if takeoff==True:
@@ -461,15 +481,25 @@ class MDROM:
         return viable
 
     # apply a reset map
-    def apply_reset(self, x_com, x_leg, contact):
+    def apply_reset(self, x_sys, x_leg, p_foot, contact):
         """
         Changing the foot location effectively applies a reset map to the system.
         """
         # TODO: eventually you will need to have a swing leg velocity as well
 
-        # Left leg update
+        # give a ground foot update
         if contact == True:
-            p_foot = self.get_foot_state_in_world(x_com, x_leg, pz_zero=True)
+            # get the current foot state
+            x_foot = self.update_foot_state(x_sys, x_leg, p_foot, 'F')
+            
+            # need the foot location
+            # TODO: I did some math to get a better apporximation
+            px_foot = x_foot[0][0]
+            pz_foot = 0.0
+            p_foot = np.array([[px_foot],
+                               [pz_foot]])
+
+        # give a flight foot update
         elif contact == False:
             p_foot = np.array([[None],
                                [None]])
@@ -563,7 +593,7 @@ class PredictiveController:
 
         return U_traj
 
-    # generate single integrator dynamics solution
+    # generate slip integrator dynamics solution
     def generate_reference_trajectory(self, x0_com, pz_des, vx_des):
         """
         Based on where the COM currently is, generate a reference trajectory
@@ -775,12 +805,38 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],  # px com
                        [0.75], # pz com
-                       [0.0],  # vx com
-                       [0.0],  # vz com
-                       [0.0],  # l0 command
-                       [0.0]]) # passive angle
+                       [1.0],  # vx com
+                       [3.0],  # vz com
+                       [system_params.l0],  # l0 command
+                       [0.0]]) # theta command
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
     U = ctrl.sample_input_trajectory()
     sol = mdrom.RK3_rollout(x0_sys, p0_foot, U, D0)
+
+    #(Tx, xt_sys, xt_leg, xt_foot, D, viability)
+    t = sol[0]
+    x_sys = sol[1]
+    x_leg = sol[2]
+    x_foot = sol[3]
+    d = sol[4]
+    viability = sol[5]
+
+    print(t.shape)
+    print(x_sys.shape)
+    print(x_leg.shape)
+    print(x_foot.shape)
+    print(len(d))
+    print(viability)
+
+    # save the data into CSV files
+            #     xk_foot[:, i+1] = self.update_foot_state(xt_sys, xk_leg, p_foot, pz_zero=False).flatten()
+            # elif Dk == 'G':
+            #     xk_foot[:, i+1] = p_foot.reshape(2)
+    np.savetxt('./data/slip/time.csv', t, delimiter=',')
+    np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
+    np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
+    np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
+    np.savetxt('./data/slip/input.csv', U.T, delimiter=',')
+    np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')
