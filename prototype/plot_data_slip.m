@@ -4,7 +4,7 @@
 clear all; close all; clc;
 
 % Load data
-t = load('./data/slip/state_time.csv');
+t = load('./data/slip/time.csv');
 x_sys = load('./data/slip/state_com.csv');
 x_leg = load('./data/slip/state_leg.csv');
 x_foot = load('./data/slip/state_foot.csv');
