@@ -489,7 +489,6 @@ class MDROM:
         """
         Changing the foot location effectively applies a reset map to the system.
         """
-
         # Flight to Ground
         if (contact_prev == False) and (contact_new == True):
             # update the ground foot location (based on heuristic)
@@ -529,6 +528,8 @@ class MDROM:
 
             # update the system 
             x_sys_post = x_sys
+            x_sys_post[4] = x_leg_post[0]  # the commands were integrating,
+            x_sys_post[5] = x_leg_post[1]  # but snap back to the passive leg state
             
             # update the foot state
             x_foot_post = self.update_foot_state(x_sys, x_leg, p_foot_post, 'F')
@@ -774,6 +775,9 @@ class PredictiveController:
 
 if __name__ == "__main__":
 
+    # set the seed
+    np.random.seed(5)
+
     # decalre the system parameters
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
@@ -793,7 +797,7 @@ if __name__ == "__main__":
     Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Qf = np.diag(Qf_diags)
     control_params = PredictiveControlParams(N=1500, 
-                                             dt=0.0005, 
+                                             dt=0.01, 
                                              K=1500,
                                              Nu=15,
                                              interp='L',
