@@ -47,8 +47,8 @@ for i = 1:length(domain)
     end
 end
 
-animate = 0;
-rt = 0.05; % realtime rate
+animate = 1;
+rt = 0.25; % realtime rate
 replays = 1;
 plot_com = 0;
 plot_foot = 0;
@@ -95,19 +95,21 @@ if animate == 0
     % LEG STATES
     subplot(3,6,3);
     hold on; grid on;
-    plot(t, q_leg(:,1), 'LineWidth', 1.5);
     plot(t, r, 'LineWidth', 2);
+    plot(t, q_leg(:,1), 'LineWidth', 1.0);
     xlabel('Time [sec]');
     ylabel('$r$ [m]', 'Interpreter', 'latex');
     title('Leg Length, r');
+    legend('leg', 'command');
 
     subplot(3,6,4);
     hold on; grid on;
-    plot(t, q_leg(:,2), 'LineWidth', 1.5);
     plot(t, theta, 'LineWidth', 2);
+    plot(t, q_leg(:,2), 'LineWidth', 1.0);
     xlabel('Time [sec]');
     ylabel('$\theta$ [rad]', 'Interpreter', 'latex');
     title('Leg Angle, theta');
+    legend('leg', 'command');
 
     subplot(3,6,9);
     hold on; grid on;
