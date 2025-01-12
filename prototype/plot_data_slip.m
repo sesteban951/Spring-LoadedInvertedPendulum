@@ -47,8 +47,7 @@ for i = 1:length(domain)
     end
 end
 
-plot_states = 0;
-animate = 1;
+animate = 0;
 rt = 0.05; % realtime rate
 replays = 1;
 plot_com = 0;
@@ -56,7 +55,7 @@ plot_foot = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-if plot_states == 1
+if animate == 0
     % plot all states
     figure('Name', 'COM States', 'WindowState', 'maximized');
 
@@ -161,15 +160,15 @@ if plot_states == 1
     title('Lambda Magnitude');
     grid on;
 
-    % INPUT
-    subplot(3,6,[15,16]); 
-    hold on; grid on;
-    plot(t(1:end-1), u(:,1), 'LineWidth', 2);
-    plot(t(1:end-1), u(:,2), 'LineWidth', 2);
-    xlabel('Time [sec]');
-    ylabel('Input');
-    title('l0 rate input');
-    grid on;
+    % % INPUT
+    % subplot(3,6,[15,16]); 
+    % hold on; grid on;
+    % plot(t(1:end-1), u(:,1), 'LineWidth', 2);
+    % plot(t(1:end-1), u(:,2), 'LineWidth', 2);
+    % xlabel('Time [sec]');
+    % ylabel('Input');
+    % title('l0 rate input');
+    % grid on;
 
     % DOMAIN
     subplot(3,6,[17:18]);

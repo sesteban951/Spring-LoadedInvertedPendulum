@@ -33,10 +33,11 @@ class PredictiveControlParams:
     """
     Predictive control parameters
     """
-    N: int       # prediction horizon
-    dt: float    # time step [s]
-    K: int       # number of rollouts
-    interp: str  # interpolation method, 'Z' for zero order hold, 'L' for linear
+    N: int        # prediction horizon
+    dt: float     # time step [s]
+    K: int        # number of rollouts
+    Nu: int       # number of input knots
+    interp: str   # interpolation method, 'Z' for zero order hold, 'L' for linear
     Q: np.array   # integrated state cost matrix
     Qf: np.array  # terminal state cost matrix
 
@@ -125,7 +126,7 @@ class MDROM:
             rdot_vec = -v_com
             rdot_x = rdot_vec[0][0]
             rdot_z = rdot_vec[1][0]
-            thetadot_hat = r_hat.T @ np.array([[rdot_x], [-rdot_z]])
+            thetadot_hat = r_hat.T @ np.array([[rdot_x], [-rdot_z]]) # passive leg angular velocity
 
             # compute the groundreaction force
             lambd = -r_hat * (k * (l0_hat - r_norm) + b * (v_com.T @ r_hat))
@@ -174,7 +175,7 @@ class MDROM:
     #################################  ROLLOUT  #################################
 
     # def RK3 integration scheme
-    def RK3_rollout(self, x0_sys, p0_foot, U, D0):
+    def RK3_rollout(self, Tx, Tu, x0_sys, p0_foot, U, D0):
         """
         Runge-Kutta 3rd order integration scheme
         """
@@ -183,22 +184,23 @@ class MDROM:
         N = self.N
 
         # make the containers
-        Tx = np.arange(0, N) * dt
-        Tu = np.arange(0, N-1) * dt
         xt_sys = np.zeros((6, N))
         xt_leg = np.zeros((4, N))
         xt_foot = np.zeros((4, N))
+        ut = np.zeros((2, N))
         lambd_t = np.zeros((2, N))
         D = [None for _ in range(N)]
 
         # compute leg state
-        x0_leg, lambd = self.update_leg_state(x0_sys, p0_foot, U[:, 0], D0)
+        u0 = self.interpolate_control_input(0, Tu, U)
+        x0_leg, lambd = self.update_leg_state(x0_sys, p0_foot, u0, D0)
         x0_foot = self.update_foot_state(x0_sys, x0_leg, p0_foot, D0)
 
         # initial conditions
         xt_sys[:, 0] = x0_sys.reshape(6) 
         xt_leg[:, 0] = x0_leg.reshape(4)
         xt_foot[:, 0] = x0_foot.reshape(4)
+        ut[:, 0] = u0.reshape(2)
         lambd_t[:, 0] = lambd.reshape(2)  
         D[0] = D0
 
@@ -239,10 +241,11 @@ class MDROM:
 
             # RK3 step and update all states
             xk_sys = xk_sys + (dt/6) * (f1 + 4*f2 + f3)
-            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u2, Dk)
+            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u3, Dk) # TODO: which input do I use here?
+            xk_foot = self.update_foot_state(xk_sys, xk_leg, p_foot, Dk)
 
             # check if hit switching surfaces and update state if needed
-            checked_contacts = self.check_switching(xk_sys, xk_leg, contacts)
+            checked_contacts = self.check_switching(xk_sys, xk_leg, xk_foot, contacts)
 
             # if a change in contact detected
             if checked_contacts != contacts:
@@ -258,10 +261,14 @@ class MDROM:
                         print('Exited the viability kernel, exited rollout...')
                         break
 
-                # update the feet positions
-                p_foot = self.apply_reset(xk_sys, xk_leg, p_foot, checked_contacts)
-                xk_sys[4] = xk_leg[0]
-                xk_sys[5] = xk_leg[1]
+                # update all states
+                xk_sys, xk_leg, xk_foot, lambd, p_foot = self.reset_map(xk_sys, 
+                                                                        xk_leg, 
+                                                                        xk_foot, 
+                                                                        p_foot, 
+                                                                        u3,
+                                                                        contacts, 
+                                                                        checked_contacts)
 
                 # update domain and contact info
                 Dk = self.domain_identification(checked_contacts)
@@ -270,8 +277,8 @@ class MDROM:
             # store the states
             xt_sys[:, i+1] = xk_sys.reshape(6)
             xt_leg[:, i+1] = xk_leg.reshape(4)
-            xk_foot = self.update_foot_state(xk_sys, xk_leg, p_foot, Dk).flatten()
-            xt_foot[:, i+1] = xk_foot
+            # xk_foot = self.update_foot_state(xk_sys, xk_leg, p_foot, Dk).flatten()
+            xt_foot[:, i+1] = xk_foot.reshape(4)
             lambd_t[:, i+1] = lambd.reshape(2)
 
             # store the domain
@@ -324,7 +331,7 @@ class MDROM:
             rdot_x = rdot_vec[0]
             rdot_z = rdot_vec[1]
 
-            # compute the left leg state in polar coordinates
+            # compute the leg state in polar coordinates
             r = np.linalg.norm(r_vec)
             rdot = -v_com.T @ r_hat
             theta = -np.arctan2(r_x, -r_z)
@@ -389,14 +396,14 @@ class MDROM:
     #################################  SWITCHING  #################################
 
     # check switching surfaces
-    def check_switching(self, x_sys, x_leg, contact):
+    def check_switching(self, x_sys, x_leg, x_foot, contact):
         """
         Check if the state has hit any switching surfaces
         """
          # In Flight (F)
         if contact == False:
             # check for touchdown
-            contact_result = self.S_TD(x_sys, x_leg)
+            contact_result = self.S_TD(x_foot)
         # In Ground(G)
         elif contact == True:
             # check for takeoff
@@ -405,21 +412,13 @@ class MDROM:
         return contact_result
 
     # Touch-Down (TD) Switching Surface -- checks individual legs
-    def S_TD(self, x_com, x_leg):
+    def S_TD(self, x_foot):
         """
         Check if a leg has touched the ground
         """
         # get relevant states
-        pz = x_com[1]
-        vz = x_com[3]
-        r = x_leg[0]         
-        theta = x_leg[1]     
-        rdot = x_leg[2]      
-        thetadot = x_leg[3]  
- 
-        # compute the foot position and velocity
-        pz_foot = pz - r * np.cos(theta)
-        vz_foot = vz - rdot * np.cos(theta) + r * thetadot * np.sin(theta)
+        pz_foot = x_foot[1][0]
+        vz_foot = x_foot[3][0]
 
         # check the switching surface conditions
         gnd_pos = (pz_foot <= 0.0)      # foot is touching the ground or below
@@ -435,7 +434,6 @@ class MDROM:
         return contact
 
     # Take-Off (TO) Switching Surface -- checks individual legs
-    # TODO: decide on switching based on force or on l0 and vcom
     def S_TO(self, x_sys, x_leg):
         """
         Check if a leg has taken off from the ground
@@ -446,7 +444,7 @@ class MDROM:
         l0_hat = x_sys[4][0]
 
         # check the switching surface conditions
-        # nom_length = (r >= self.l0)        # the leg is at its nominal uncompressed length
+        # nom_length = (r >= self.l0)      # the leg is at its nominal uncompressed length
         nom_length = (r >= l0_hat)         # the leg is at its nominal uncompressed length
         pos_vel = (rdot >= 0.0)            # the leg is going in uncompressing direction
         takeoff = nom_length and pos_vel   # if true, leg has taken off into flight
@@ -487,30 +485,55 @@ class MDROM:
         return viable
 
     # apply a reset map
-    def apply_reset(self, x_sys, x_leg, p_foot, contact):
+    def reset_map(self, x_sys, x_leg, x_foot, p_foot, u, contact_prev, contact_new):
         """
         Changing the foot location effectively applies a reset map to the system.
         """
-        # TODO: eventually you will need to have a swing leg velocity as well
 
-        # give a ground foot update
-        if contact == True:
-            # get the current foot state
-            x_foot = self.update_foot_state(x_sys, x_leg, p_foot, 'F')
-            
-            # need the foot location
-            # TODO: I did some math to get a better apporximation
+        # Flight to Ground
+        if (contact_prev == False) and (contact_new == True):
+            # update the ground foot location (based on heuristic)
             px_foot = x_foot[0][0]
-            pz_foot = 0.0
-            p_foot = np.array([[px_foot],
-                               [pz_foot]])
+            pz_foot = x_foot[1][0]
+            vx_foot = x_foot[2][0]
+            vz_foot = x_foot[3][0]
+            # px_foot_post = px_foot - (vx_foot/vz_foot) * pz_foot # there's different approximations of this
+            px_foot_post = px_foot
+            pz_foot_post = 0.0
+            p_foot_post = np.array([[px_foot_post],
+                                    [pz_foot_post]])
 
-        # give a flight foot update
-        elif contact == False:
-            p_foot = np.array([[None],
-                               [None]])
+            # update the leg
+            x_leg_post, lambd_post = self.update_leg_state(x_sys, p_foot_post, u, 'G')
 
-        return p_foot
+            # update the system
+            x_sys_post = x_sys
+            x_sys_post[4] = x_leg_post[0]
+            x_sys_post[5] = x_leg_post[1]
+
+            # update the foot state
+            x_foot_post = self.update_foot_state(x_sys_post, x_leg_post, p_foot_post, 'G')
+
+        # Ground to Flight
+        # TODO: there is something wrong with the ground to flight reset map!!!
+        elif (contact_prev == True) and (contact_new == False):
+            # update the ground foot location (flight phase, no contact)
+            p_foot_post = np.array([[None],
+                                    [None]])
+            
+            # update the leg
+            x_leg_post= x_leg
+            x_leg_post[2] = u[0]
+            x_leg_post[3] = u[1]
+            lambd_post = np.array([[0], [0]])
+
+            # update the system 
+            x_sys_post = x_sys
+            
+            # update the foot state
+            x_foot_post = self.update_foot_state(x_sys, x_leg, p_foot_post, 'F')
+
+        return x_sys_post, x_leg_post, x_foot_post, lambd_post, p_foot_post
 
     #################################  DOMAIN/CONTACT MAPPING  #################################
     
@@ -563,15 +586,26 @@ class PredictiveController:
         self.dt = ctrl_params.dt
         self.N = ctrl_params.N
         self.K = ctrl_params.K
+        self.Nu = ctrl_params.Nu
+
+    # generate tiem know points
+    def generate_time_array(self):
+        """
+        Generate the time array for the prediction horizon, also for the control input knots.
+        """
+        Tx = np.arange(0, self.N) * self.dt
+        Tu = np.linspace(0, Tx[-1], self.Nu)
+
+        return Tx, Tu
 
     # sample an input trajectory given a distribution
     def sample_input_trajectory(self):
         """
-        Given a distribution, sample an input trajectory
+        Given a distribution and number of control points, sample an input trajectory
         """
         # get the distribution parameters
         mean = self.distr_params.mean
-        
+
         # sample from Gaussian dsitribution
         if self.distr_params.family == 'G':
             cov = self.distr_params.cov
@@ -589,8 +623,8 @@ class PredictiveController:
             U_vec = np.random.uniform(lb.flatten(), ub.flatten()).T
 
         # unflatten the trajectory
-        U_traj = np.zeros((2, self.ctrl_params.N-1))
-        for i in range(0, self.ctrl_params.N-1):
+        U_traj = np.zeros((2, self.Nu))
+        for i in range(0, self.Nu):
             U_traj[:, i] = U_vec[ 2*i : 2*i+2 ]
 
         # saturate the inputs
@@ -750,23 +784,21 @@ if __name__ == "__main__":
                                  r_max=0.8,
                                  theta_min=-np.pi/3,
                                  theta_max=np.pi/3,
-                                 rdot_lim=0.75,
-                                 thetadot_lim=np.pi)
+                                 rdot_lim=0.5,
+                                 thetadot_lim=np.pi/3)
 
     # declare control parameters
     Q_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Q = np.diag(Q_diags)
     Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=150, 
-                                             dt=0.005, 
+    control_params = PredictiveControlParams(N=1500, 
+                                             dt=0.0005, 
                                              K=1500,
+                                             Nu=15,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf)
-
-    # declare reduced order model object
-    mdrom = MDROM(system_params, control_params)
 
     # create parametric distribution parameters
     mean_r = 0.0          # [m/s]
@@ -780,22 +812,22 @@ if __name__ == "__main__":
     # Gaussian distribution
     std_dev = np.array([std_dev_r**2,       # r [m]
                         std_dev_theta**2])  # theta [rad]
-    mean_initial = np.tile(mean, (control_params.N-1, 1))
+    mean_initial = np.tile(mean, (control_params.Nu, 1))
     std_dev_matrix = np.diag(std_dev)
-    I = np.eye(control_params.N-1)
+    I = np.eye(control_params.Nu)
     cov_initial = np.kron(I, std_dev_matrix)
 
     # Uniform distribution
-    lb_r = -0.75    # [m/s]
-    ub_r = 0.75     # [m/s]
-    lb_theta = -1.0 # [rad/s]
-    ub_theta = 1.0  # [rad/s]
+    lb_rdot = -0.75    # [m/s]
+    ub_rdot = 0.75     # [m/s]
+    lb_thetadot = -1.0 # [rad/s]
+    ub_thetadot = 1.0  # [rad/s]
 
-    lb = np.array([[lb_r],      # r [m]
-                   [lb_theta]]) # theta [rad]
-    ub = np.array([[ub_r],      # r [m]
-                   [ub_theta]]) # theta [rad]
-    ones_vec = np.ones((control_params.N-1, 1))
+    lb = np.array([[lb_rdot],      # r [m]
+                   [lb_thetadot]]) # theta [rad]
+    ub = np.array([[ub_rdot],      # r [m]
+                   [ub_thetadot]]) # theta [rad]
+    ones_vec = np.ones((control_params.Nu, 1))
     lb_initial = np.kron(ones_vec, lb)
     ub_initial = np.kron(ones_vec, ub)
     
@@ -804,25 +836,28 @@ if __name__ == "__main__":
                                                  cov=cov_initial,
                                                  lb=lb_initial,
                                                  ub=ub_initial)
-    
+
+    # declare reduced order model object
+    mdrom = MDROM(system_params, control_params)
+
     # create a predictive controller object
     ctrl = PredictiveController(mdrom, system_params, control_params, distribution_params)
 
     # initial conditions
-    x0_sys = np.array([[0.0],  # px com
-                       [0.8],  # pz com
-                       [0],  # vx com
-                       [0],   # vz com
-                       [system_params.l0],  # l0 command
-                       [0.0]]) # theta command
+    x0_sys = np.array([[0.0],              # px com
+                       [0.8],              # pz com
+                       [0],                # vx com
+                       [0],                # vz com
+                       [system_params.l0], # l0 command
+                       [0.0]])             # theta command
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
-    U = ctrl.sample_input_trajectory()
-    # u = np.array([[0.25], [0.25]])
-    # U = np.tile(u, (1, control_params.N-1))
+    Tx, Tu = ctrl.generate_time_array()
 
-    sol = mdrom.RK3_rollout(x0_sys, p0_foot, U, D0)
+    U = ctrl.sample_input_trajectory()
+
+    sol = mdrom.RK3_rollout(Tx, Tu, x0_sys, p0_foot, U, D0)
     
     t = sol[0]
     x_sys = sol[1]
