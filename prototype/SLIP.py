@@ -258,7 +258,7 @@ class MDROM:
                     
                     # you're going to die, exit the for loop
                     if viability == False:
-                        print('Exited the viability kernel, exited rollout...')
+                        print('Exited Viability Kernel, terminating rollout...')
                         break
 
                 # update all states
@@ -277,15 +277,15 @@ class MDROM:
             # store the states
             xt_sys[:, i+1] = xk_sys.reshape(6)
             xt_leg[:, i+1] = xk_leg.reshape(4)
-            # xk_foot = self.update_foot_state(xk_sys, xk_leg, p_foot, Dk).flatten()
             xt_foot[:, i+1] = xk_foot.reshape(4)
+            ut[:, i+1] = u3.reshape(2)
             lambd_t[:, i+1] = lambd.reshape(2)
 
             # store the domain
             D[i+1] = Dk
 
         # package into a solution
-        sol = (Tx, xt_sys, xt_leg, xt_foot, lambd_t, D, viability)
+        sol = (Tx, xt_sys, xt_leg, xt_foot, ut, lambd_t, D, viability)
 
         return sol
 
@@ -493,9 +493,9 @@ class MDROM:
         if (contact_prev == False) and (contact_new == True):
             # update the ground foot location (based on heuristic)
             px_foot = x_foot[0][0]
-            pz_foot = x_foot[1][0]
-            vx_foot = x_foot[2][0]
-            vz_foot = x_foot[3][0]
+            # pz_foot = x_foot[1][0]
+            # vx_foot = x_foot[2][0]
+            # vz_foot = x_foot[3][0]
             # px_foot_post = px_foot - (vx_foot/vz_foot) * pz_foot # there's different approximations of this
             px_foot_post = px_foot
             pz_foot_post = 0.0
@@ -514,7 +514,6 @@ class MDROM:
             x_foot_post = self.update_foot_state(x_sys_post, x_leg_post, p_foot_post, 'G')
 
         # Ground to Flight
-        # TODO: there is something wrong with the ground to flight reset map!!!
         elif (contact_prev == True) and (contact_new == False):
             # update the ground foot location (flight phase, no contact)
             p_foot_post = np.array([[None],
@@ -528,8 +527,8 @@ class MDROM:
 
             # update the system 
             x_sys_post = x_sys
-            x_sys_post[4] = x_leg_post[0]  # the commands were integrating,
-            x_sys_post[5] = x_leg_post[1]  # but snap back to the passive leg state
+            x_sys_post[4] = x_leg_post[0]  # the l0 & theta_hat, commands were being integrating during
+            x_sys_post[5] = x_leg_post[1]  # ground phase, now snap back to the actual leg state
             
             # update the foot state
             x_foot_post = self.update_foot_state(x_sys, x_leg, p_foot_post, 'F')
@@ -588,16 +587,6 @@ class PredictiveController:
         self.N = ctrl_params.N
         self.K = ctrl_params.K
         self.Nu = ctrl_params.Nu
-
-    # generate tiem know points
-    def generate_time_array(self):
-        """
-        Generate the time array for the prediction horizon, also for the control input knots.
-        """
-        Tx = np.arange(0, self.N) * self.dt
-        Tu = np.linspace(0, Tx[-1], self.Nu)
-
-        return Tx, Tu
 
     # sample an input trajectory given a distribution
     def sample_input_trajectory(self):
@@ -667,12 +656,15 @@ class PredictiveController:
         Evaulate the cost function given a propagated and desired trajecotry.
         """
         # unpack solution
+        # sol = (T, xt_sys, xt_leg, xt_foot, lambd_t, D, viability)
         # T = sol[0]
         X_com = sol[1]
         # X_leg = sol[2]
-        # P_foot = sol[3]
-        # D = sol[4]
-        viability = sol[5]
+        # X_foot = sol[3]
+        # U = sol[4]
+        # Lambd = sol[5]
+        # D = sol[6]
+        viability = sol[7]
 
         # if the pendulum falls assign infinite cost
         if viability == False:
@@ -688,7 +680,7 @@ class PredictiveController:
             state_cost = 0.0
             for i in range(0, self.N-1):
                 # compute error
-                xi_com = X_com[:, i]   
+                xi_com = X_com[:4, i]   
                 xi_com_des = X_com_des[:, i]
                 e_com = (xi_com - xi_com_des).reshape(4, 1)
 
@@ -697,7 +689,7 @@ class PredictiveController:
                 state_cost += cost
 
             # terminal cost
-            xf_com = X_com[:, self.N-1]
+            xf_com = X_com[:4, self.N-1]
             xf_com_des = X_com_des[:, self.N-1]
             ef_com = (xf_com - xf_com_des).reshape(4, 1)
             terminal_cost = ef_com.T @ Qf @ ef_com
@@ -709,28 +701,34 @@ class PredictiveController:
         return total_cost
     
     # perform horizon rollouts
-    def monte_carlo(self, x0, p_foot, D0):
+    def monte_carlo(self, x0_sys, p0_foot, D0):
+
+        # generate the time arrays
+        Tx = np.arange(0, self.N) * self.dt
+        Tu = np.linspace(0, Tx[-1], self.Nu)
 
         # preallocate the the containers
         J_list = np.zeros((1, self.K))            # cost function list
-        U_list = np.zeros((2, self.N-1, self.K))  # input trajectory list
+        U_list = np.zeros((2, self.Nu, self.K))    # input trajectory list
         S_list = [None for _ in range(self.K)]    # solution list
 
         # generate the reference trajectory
         vx_des = 0.00
         pz_des = 0.70
-        X_des = self.generate_reference_trajectory(x0, pz_des, vx_des)
+        X_des = self.generate_reference_trajectory(x0_sys, pz_des, vx_des)
 
         # perform the rollouts
         for k in range(0, self.K):
+            
             print('Rollout: ', k)
+
             # sample an input trajectory
             U = self.sample_input_trajectory()
             
             # rollout the dynamics under the input trajectory
-            S = self.mdrom.RK3_rollout(x0, p_foot, U, D0)
+            S = self.mdrom.RK3_rollout(Tx, Tu, x0_sys, p0_foot, U, D0)
 
-            # evaluate the cost function, no failure, compute cost
+            # evaluate the cost function
             J = self.cost_function(X_des, S)
 
             # save the data
@@ -748,12 +746,12 @@ class PredictiveController:
         return S_list, U_list, J_list
     
     # perfomr sampling based predictive control
-    def predictive_control(self, x0, p_foot, D0):
+    def predictive_control(self, x0_sys, p_foot, D0):
         """
         Perform sampling predictive control
         """
         # perform the monte carlo simulation        
-        S_list, U_list, J_list = ctrl.monte_carlo(x0_com, p_foot, D0)
+        S_list, U_list, J_list = ctrl.monte_carlo(x0_sys, p_foot, D0)
 
         # reorder the rollouts based on cost
         S_star = S_list[0]
@@ -775,10 +773,7 @@ class PredictiveController:
 
 if __name__ == "__main__":
 
-    # set the seed
-    np.random.seed(5)
-
-    # decalre the system parameters
+    # declare the system parameters
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=5000.0, 
@@ -796,9 +791,9 @@ if __name__ == "__main__":
     Q = np.diag(Q_diags)
     Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=1500, 
-                                             dt=0.01, 
-                                             K=1500,
+    control_params = PredictiveControlParams(N=200, 
+                                             dt=0.005, 
+                                             K=1000,
                                              Nu=15,
                                              interp='L',
                                              Q=Q,
@@ -857,32 +852,40 @@ if __name__ == "__main__":
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
-    Tx, Tu = ctrl.generate_time_array()
+    # MONTE CARLO
+    # sol = ctrl.predictive_control(x0_sys, p0_foot, D0)
+    t0 = time.time()
+    S, U, J = ctrl.monte_carlo(x0_sys, p0_foot, D0)
+    tf = time.time()
+    print('Elapsed time: ', tf - t0)    
+    print('Average time spent per rollout: ', (tf - t0) / control_params.K) 
+    print('Percent Failure Rate: ', np.sum(J==np.inf) / control_params.K)
+    print('Failure: %d/%d' % (np.sum(J==np.inf), control_params.K))
 
-    U = ctrl.sample_input_trajectory()
+    sol = S[0]
 
-    sol = mdrom.RK3_rollout(Tx, Tu, x0_sys, p0_foot, U, D0)
-    
     t = sol[0]
     x_sys = sol[1]
     x_leg = sol[2]
     x_foot = sol[3]
-    lambd = sol[4]
-    d = sol[5]
-    viability = sol[6]
+    u = sol[4]
+    lambd = sol[5]
+    d = sol[6]
+    viability = sol[7]
 
-    print(t.shape)
-    print(x_sys.shape)
-    print(x_leg.shape)
-    print(x_foot.shape)
-    print(lambd.shape)
-    print(len(d))
-    print(viability)
+    # print(t.shape)
+    # print(x_sys.shape)
+    # print(x_leg.shape)
+    # print(x_foot.shape)
+    # print(u.shape)
+    # print(lambd.shape)
+    # print(len(d))
+    # print(viability)
 
     np.savetxt('./data/slip/time.csv', t, delimiter=',')
     np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
     np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
     np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
+    np.savetxt('./data/slip/input.csv', u.T, delimiter=',')
     np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
-    np.savetxt('./data/slip/input.csv', U.T, delimiter=',')
     np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')

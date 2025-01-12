@@ -4,7 +4,7 @@
 clear all; close all; clc;
 
 % Load data
-t = load('./data/slip/time.csv');
+t = load('./data/slip/state_time.csv');
 x_sys = load('./data/slip/state_com.csv');
 x_leg = load('./data/slip/state_leg.csv');
 x_foot = load('./data/slip/state_foot.csv');
@@ -162,15 +162,15 @@ if animate == 0
     title('Lambda Magnitude');
     grid on;
 
-    % % INPUT
-    % subplot(3,6,[15,16]); 
-    % hold on; grid on;
-    % plot(t(1:end-1), u(:,1), 'LineWidth', 2);
-    % plot(t(1:end-1), u(:,2), 'LineWidth', 2);
-    % xlabel('Time [sec]');
-    % ylabel('Input');
-    % title('l0 rate input');
-    % grid on;
+    % INPUT
+    subplot(3,6,[15,16]); 
+    hold on; grid on;
+    plot(t, u(:,2), 'LineWidth', 2);
+    plot(t, u(:,1), 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('Input');
+    title('l0 rate input');
+    grid on;
 
     % DOMAIN
     subplot(3,6,[17:18]);
