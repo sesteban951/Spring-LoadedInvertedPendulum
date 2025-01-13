@@ -48,8 +48,9 @@ for i = 1:length(domain)
 end
 
 animate = 1;
-rt = 1.0; % realtime rate
-replays = 1;
+rt = 0.5; % realtime rate
+replays = 3;
+save_video = 0;
 plot_com = 0;
 plot_foot = 0;
 
@@ -205,8 +206,15 @@ if animate == 1
     xlim([px_min-0.25, px_max+0.25]);
     ylim([min(0, pz_min)-0.25, pz_max+0.25]);
     
+    % Video writer setup
+    if save_video == 1
+        video_filename = 'SLIP_CEM';  % Set your video file name
+        v = VideoWriter(video_filename, 'Motion JPEG AVI');  % Create a video writer object
+        v.FrameRate = 1/rt;  % Adjust the frame rate based on your animation speed
+        open(v);  % Open the video file for writing
+    end
+
     t  = t * (1/rt);
-   
     for i = 1:replays
         pause(0.25);
         tic;
@@ -222,23 +230,32 @@ if animate == 1
             % draw the legs
             px_foot = p_foot(ind,1);
             pz_foot = p_foot(ind,2);
+            leg = plot([px, px_foot], [pz, pz_foot], 'k', 'LineWidth', 3);
+            ball_foot = plot(px_foot, pz_foot, 'ko', 'MarkerSize', 7, 'MarkerFaceColor', 'k');
+            
+            % draw the mass
             if domain(ind) == 'F'
-                leg = plot([px, px_foot], [pz, pz_foot], 'b', 'LineWidth', 3);
+                mass = plot(px, pz, 'ko', 'MarkerSize', 35, 'MarkerFaceColor', [0 0.4470 0.7410], 'LineWidth', 1.5, 'MarkerEdgeColor', 'k');
             elseif domain(ind) == 'G'
-                leg = plot([px, px_foot], [pz, pz_foot], 'r', 'LineWidth', 3);
+                mass = plot(px, pz, 'ko', 'MarkerSize', 35, 'MarkerFaceColor', [0.6350 0.0780 0.1840], 'LineWidth', 1.5, 'MarkerEdgeColor', 'k');
             end
+
+            %  draw trajectory trail
             if plot_foot == 1
                 foot = plot(px_foot, pz_foot, 'bo', 'MarkerSize', 1, 'MarkerFaceColor', 'b');
                 foot_pts = [foot_pts; foot];
             end
-
-            % draw the mass
-            mass = plot(px, pz, 'ko', 'MarkerSize', 30, 'MarkerFaceColor', [0.8500 0.3250 0.0980]);
             if plot_com ==1
                 pt_pos = plot(px, pz, 'k.', 'MarkerSize', 5);
                 com_pts = [com_pts; pt_pos];
             end
 
+            % Capture the frame and write to video
+            if save_video == 1
+                frame = getframe(gcf);  % Capture current figure frame
+                writeVideo(v, frame);   % Write frame to video
+            end
+            
             drawnow;
             
             % title
@@ -258,13 +275,21 @@ if animate == 1
                 ind = ind + 1;
                 delete(mass);
                 delete(leg);
+                delete(ball_foot);
             end
+        end
+
+        % Close video writer
+        if save_video == 1
+            close(v);
+            break;
         end
 
         % clean the plot if still replaying
         if i < replays
             delete(mass);
             delete(leg);
+            delete(ball_foot);
             for j = 1:length(com_pts)
                 if plot_com == 1
                     delete(com_pts(j));
