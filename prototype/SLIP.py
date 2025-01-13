@@ -33,13 +33,15 @@ class PredictiveControlParams:
     """
     Predictive control parameters
     """
-    N: int        # prediction horizon
-    dt: float     # time step [s]
-    K: int        # number of rollouts
-    Nu: int       # number of input knots
-    interp: str   # interpolation method, 'Z' for zero order hold, 'L' for linear
-    Q: np.array   # integrated state cost matrix
-    Qf: np.array  # terminal state cost matrix
+    N: int         # prediction horizon
+    dt: float      # time step [s]
+    K: int         # number of rollouts
+    Nu: int        # number of input knots
+    interp: str    # interpolation method, 'Z' for zero order hold, 'L' for linear
+    Q: np.array    # integrated state cost matrix
+    Qf: np.array   # terminal state cost matrix
+    N_elite: int   # number of elite rollouts
+    CEM_iters: int # number of CEM iterations
 
 @dataclass
 class ParametricDistribution:
@@ -241,7 +243,7 @@ class MDROM:
 
             # RK3 step and update all states
             xk_sys = xk_sys + (dt/6) * (f1 + 4*f2 + f3)
-            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u3, Dk) # TODO: which input do I use here?
+            xk_leg, lambd = self.update_leg_state(xk_sys, p_foot, u3, Dk)
             xk_foot = self.update_foot_state(xk_sys, xk_leg, p_foot, Dk)
 
             # check if hit switching surfaces and update state if needed
@@ -258,7 +260,7 @@ class MDROM:
                     
                     # you're going to die, exit the for loop
                     if viability == False:
-                        print('Exited Viability Kernel, terminating rollout...')
+                        # print('Exited Viability Kernel, terminating rollout...')
                         break
 
                 # update all states
@@ -587,6 +589,13 @@ class PredictiveController:
         self.N = ctrl_params.N
         self.K = ctrl_params.K
         self.Nu = ctrl_params.Nu
+        self.N_elite = ctrl_params.N_elite
+
+        # distribution parameters
+        self.mean = distr_params.mean
+        self.cov = distr_params.cov
+        self.lb = distr_params.lb
+        self.ub = distr_params.ub
 
     # sample an input trajectory given a distribution
     def sample_input_trajectory(self):
@@ -594,11 +603,11 @@ class PredictiveController:
         Given a distribution and number of control points, sample an input trajectory
         """
         # get the distribution parameters
-        mean = self.distr_params.mean
+        mean = self.mean
 
         # sample from Gaussian dsitribution
         if self.distr_params.family == 'G':
-            cov = self.distr_params.cov
+            cov = self.cov
         
             # https://en.wikipedia.org/wiki/Multivariate_normal_distribution#Drawing_values_from_the_distribution
             L = np.linalg.cholesky(cov)
@@ -608,8 +617,8 @@ class PredictiveController:
 
         # sample from uniform distirbution
         elif self.distr_params.family == 'U':
-            lb = self.distr_params.lb
-            ub = self.distr_params.ub
+            lb = self.lb
+            ub = self.ub
             U_vec = np.random.uniform(lb.flatten(), ub.flatten()).T
 
         # unflatten the trajectory
@@ -701,7 +710,7 @@ class PredictiveController:
         return total_cost
     
     # perform horizon rollouts
-    def monte_carlo(self, x0_sys, p0_foot, D0):
+    def monte_carlo(self, x0_sys, p0_foot, D0, U_list):
 
         # generate the time arrays
         Tx = np.arange(0, self.N) * self.dt
@@ -713,14 +722,15 @@ class PredictiveController:
         S_list = [None for _ in range(self.K)]    # solution list
 
         # generate the reference trajectory
-        vx_des = 0.00
-        pz_des = 0.70
+        # TODO: right now these are hard coded, eventually will be passed in
+        vx_des = 0.0
+        pz_des = 1.0
         X_des = self.generate_reference_trajectory(x0_sys, pz_des, vx_des)
 
         # perform the rollouts
         for k in range(0, self.K):
             
-            print('Rollout: ', k)
+            # print('Rollout: ', k)
 
             # sample an input trajectory
             U = self.sample_input_trajectory()
@@ -745,27 +755,89 @@ class PredictiveController:
 
         return S_list, U_list, J_list
     
-    # perfomr sampling based predictive control
+    # perform sampling based predictive control
     def predictive_control(self, x0_sys, p_foot, D0):
         """
         Perform sampling predictive control
         """
-        # perform the monte carlo simulation        
-        S_list, U_list, J_list = ctrl.monte_carlo(x0_sys, p_foot, D0)
+        # perform cross entropy iterations
+        for i in range(0, self.ctrl_params.CEM_iters):
 
-        # reorder the rollouts based on cost
-        S_star = S_list[0]
-        U_star = U_list[:, :, 0]
-        J_star = J_list[0]
+            print('-'*50)
+            print('CEM Iteration: ', i+1)
+            print('-'*50)
 
-        # unpack the solution
-        t = S_star[0]
-        x_com = S_star[1]
-        x_leg = S_star[2]
-        p_foot = S_star[3]
-        D = S_star[4]
+            # generate list of input trajecotries
+            U_list = np.zeros((2, self.Nu, self.K))
+            for i in range(0, self.K):
+                U_list[:, :, i] = self.sample_input_trajectory()
 
-        return t, x_com, x_leg, p_foot, D, J_star
+            # perform the monte carlo simulation
+            t0 = time.time()
+            S_ascending, U_ascending, J_ascending = ctrl.monte_carlo(x0_sys, p_foot, D0, U_list)
+            tf = time.time()
+            print('Elapsed time: ', tf - t0)
+            print('Average time spent per rollout: ', (tf - t0) / control_params.K) 
+            print('Percent Failure Rate: ', np.sum(J_ascending==np.inf) / control_params.K)
+            print('Failure: %d/%d' % (np.sum(J_ascending==np.inf), control_params.K))
+
+            # compute the new distribution
+            if self.distr_params.family == 'G':
+                self.mu, self.cov = self.update_gaussian_distribution(U_ascending)
+                print('updated gaussian')
+            elif self.distr_params.family == 'U':
+                self.lb, self.ub = self.update_uniform_distribution(U_ascending)
+                print('updated uniform')
+
+        print('Finished preditcion horizon optimization')
+
+        return S_ascending[0]
+
+    # update the Gaussian distribution
+    def update_gaussian_distribution(self, U_list):
+        """
+        Average the control inputs of the elite rollouts
+        """        
+        # select the elite rollouts
+        U_elite = U_list[:, :, 0:self.N_elite]
+
+        # calculate the means and covariances of each control knot
+        mu = np.zeros((2 * self.Nu, 1))
+        cov = np.zeros((2 * self.Nu, 2 * self.Nu))
+        for i in range(0, self.Nu):
+
+            # calculate the mean at control knot i
+            U_t = np.zeros((2, self.N_elite))
+            for j in range(0, self.N_elite):
+                U_t[:, j] = U_elite[:, i, j]
+            mean_t = np.mean(U_t, axis=1).reshape(2, 1)
+
+            # compute the sample covariance (Ne-1 becuase of Bessel correction)
+            cov_t = (1 / (self.N_elite-1) ) * (U_t - mean_t) @ (U_t - mean_t).T
+
+            # TODO: these should be custom options
+            # keep only the diagonal elements
+            cov_t_diags = np.diag(np.diag(cov_t))
+            min_diag = np.array([[0.2**2],
+                                 [np.pi/5**2]])
+            cov_t_diags = np.maximum(cov_t_diags, min_diag)
+            cov_t = np.diag(np.diag(cov_t_diags))
+
+            # insert into the mean and covariance
+            mu[(2*i):(2*i+2)] = mean_t
+            cov[(2*i):(2*i+2) , (2*i):(2*i+2)] = cov_t
+
+        return mu, cov
+    
+    # update the Uniform distribution
+    def update_uniform_distribution(self, U_list):
+        """
+        Average the control inputs of the elite rollouts
+        """        
+        lb = 0
+        ub = 0
+
+        return lb, ub
 
 #######################################################################
 # MAIN
@@ -773,37 +845,41 @@ class PredictiveController:
 
 if __name__ == "__main__":
 
+    # np.random.seed(0)
+
     # declare the system parameters
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
-                                 k=5000.0, 
-                                 b=100.0,
+                                 k=7500.0, 
+                                 b=50.0,
                                  l0=0.65,
                                  r_min=0.4,
                                  r_max=0.8,
                                  theta_min=-np.pi/3,
                                  theta_max=np.pi/3,
-                                 rdot_lim=0.5,
-                                 thetadot_lim=np.pi/3)
+                                 rdot_lim=1.0,
+                                 thetadot_lim=np.pi/2)
 
     # declare control parameters
-    Q_diags = np.array([1.0, 1.0, 0.05, 0.05])
+    Q_diags = np.array([10.0, 7.0, 1.0, 1.0])
     Q = np.diag(Q_diags)
-    Qf_diags = np.array([1.0, 1.0, 0.05, 0.05])
+    Qf_diags = np.array([15.0, 10.0, 2.0, 2.0])
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=200, 
-                                             dt=0.005, 
-                                             K=1000,
-                                             Nu=15,
+    control_params = PredictiveControlParams(N=150, 
+                                             dt=0.0075, 
+                                             K=500,
+                                             Nu=20,
                                              interp='L',
                                              Q=Q,
-                                             Qf=Qf)
+                                             Qf=Qf,
+                                             N_elite=3,
+                                             CEM_iters=10)
 
     # create parametric distribution parameters
     mean_r = 0.0          # [m/s]
     mean_theta = 0.0      # [rad/s]
-    std_dev_r = 1.5      # [m/s]
-    std_dev_theta = 20.0   # [rad/s]
+    std_dev_r = 1.0      # [m/s]
+    std_dev_theta = np.pi   # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -853,16 +929,7 @@ if __name__ == "__main__":
     D0 = 'F'  # initial domain
 
     # MONTE CARLO
-    # sol = ctrl.predictive_control(x0_sys, p0_foot, D0)
-    t0 = time.time()
-    S, U, J = ctrl.monte_carlo(x0_sys, p0_foot, D0)
-    tf = time.time()
-    print('Elapsed time: ', tf - t0)    
-    print('Average time spent per rollout: ', (tf - t0) / control_params.K) 
-    print('Percent Failure Rate: ', np.sum(J==np.inf) / control_params.K)
-    print('Failure: %d/%d' % (np.sum(J==np.inf), control_params.K))
-
-    sol = S[0]
+    sol = ctrl.predictive_control(x0_sys, p0_foot, D0)
 
     t = sol[0]
     x_sys = sol[1]
@@ -873,19 +940,19 @@ if __name__ == "__main__":
     d = sol[6]
     viability = sol[7]
 
-    # print(t.shape)
-    # print(x_sys.shape)
-    # print(x_leg.shape)
-    # print(x_foot.shape)
-    # print(u.shape)
-    # print(lambd.shape)
-    # print(len(d))
-    # print(viability)
+    print(t.shape)
+    print(x_sys.shape)
+    print(x_leg.shape)
+    print(x_foot.shape)
+    print(u.shape)
+    print(lambd.shape)
+    print(len(d))
+    print(viability)
 
-    np.savetxt('./data/slip/time.csv', t, delimiter=',')
-    np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
-    np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
-    np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
-    np.savetxt('./data/slip/input.csv', u.T, delimiter=',')
-    np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
-    np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')
+    # np.savetxt('./data/slip/time.csv', t, delimiter=',')
+    # np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
+    # np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
+    # np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
+    # np.savetxt('./data/slip/input.csv', u.T, delimiter=',')
+    # np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
+    # np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')

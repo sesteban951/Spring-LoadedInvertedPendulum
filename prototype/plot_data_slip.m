@@ -48,7 +48,7 @@ for i = 1:length(domain)
 end
 
 animate = 1;
-rt = 0.25; % realtime rate
+rt = 1.0; % realtime rate
 replays = 1;
 plot_com = 0;
 plot_foot = 0;
