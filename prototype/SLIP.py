@@ -673,39 +673,39 @@ class PredictiveController:
         # U = sol[4]
         # Lambd = sol[5]
         # D = sol[6]
-        viability = sol[7]
+        # viability = sol[7]
 
         # if the pendulum falls assign infinite cost
-        if viability == False:
-            total_cost = np.inf
+        # if viability == False:
+        #     total_cost = np.inf
 
-        # viable solution, compute the cost
-        elif viability == True:
-            # unpack some cost parameters
-            Q = self.ctrl_params.Q
-            Qf = self.ctrl_params.Qf
+        # # viable solution, compute the cost
+        # elif viability == True:
+        # unpack some cost parameters
+        Q = self.ctrl_params.Q
+        Qf = self.ctrl_params.Qf
 
-            # stage cost
-            state_cost = 0.0
-            for i in range(0, self.N-1):
-                # compute error
-                xi_com = X_com[:4, i]   
-                xi_com_des = X_com_des[:, i]
-                e_com = (xi_com - xi_com_des).reshape(4, 1)
+        # stage cost
+        state_cost = 0.0
+        for i in range(0, self.N-1):
+            # compute error
+            xi_com = X_com[:4, i]   
+            xi_com_des = X_com_des[:, i]
+            e_com = (xi_com - xi_com_des).reshape(4, 1)
 
-                # compute cost
-                cost = e_com.T @ Q @ e_com
-                state_cost += cost
+            # compute cost
+            cost = e_com.T @ Q @ e_com
+            state_cost += cost
 
-            # terminal cost
-            xf_com = X_com[:4, self.N-1]
-            xf_com_des = X_com_des[:, self.N-1]
-            ef_com = (xf_com - xf_com_des).reshape(4, 1)
-            terminal_cost = ef_com.T @ Qf @ ef_com
+        # terminal cost
+        xf_com = X_com[:4, self.N-1]
+        xf_com_des = X_com_des[:, self.N-1]
+        ef_com = (xf_com - xf_com_des).reshape(4, 1)
+        terminal_cost = ef_com.T @ Qf @ ef_com
 
-            # total cost
-            total_cost = state_cost + terminal_cost
-            total_cost = total_cost[0][0]
+        # total cost
+        total_cost = state_cost + terminal_cost
+        total_cost = total_cost[0][0]
 
         return total_cost
     
@@ -718,22 +718,20 @@ class PredictiveController:
 
         # preallocate the the containers
         J_list = np.zeros((1, self.K))            # cost function list
-        U_list = np.zeros((2, self.Nu, self.K))    # input trajectory list
+        # U_list = np.zeros((2, self.Nu, self.K))    # input trajectory list
         S_list = [None for _ in range(self.K)]    # solution list
 
         # generate the reference trajectory
         # TODO: right now these are hard coded, eventually will be passed in
         vx_des = 0.0
-        pz_des = 1.0
+        pz_des = 0.65
         X_des = self.generate_reference_trajectory(x0_sys, pz_des, vx_des)
 
         # perform the rollouts
         for k in range(0, self.K):
-            
-            # print('Rollout: ', k)
 
             # sample an input trajectory
-            U = self.sample_input_trajectory()
+            U = U_list[:, :, k]
             
             # rollout the dynamics under the input trajectory
             S = self.mdrom.RK3_rollout(Tx, Tu, x0_sys, p0_foot, U, D0)
@@ -743,7 +741,6 @@ class PredictiveController:
 
             # save the data
             J_list[:,k] = J
-            U_list[:, :, k] = U
             S_list[k] = S
 
         # reorder the rollouts based on cost
@@ -851,7 +848,7 @@ if __name__ == "__main__":
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=7500.0, 
-                                 b=50.0,
+                                 b=250.0,
                                  l0=0.65,
                                  r_min=0.4,
                                  r_max=0.8,
@@ -861,25 +858,25 @@ if __name__ == "__main__":
                                  thetadot_lim=np.pi/2)
 
     # declare control parameters
-    Q_diags = np.array([10.0, 7.0, 1.0, 1.0])
+    Q_diags = np.array([10.0, 10.0, 0.75, 0.75])
     Q = np.diag(Q_diags)
-    Qf_diags = np.array([15.0, 10.0, 2.0, 2.0])
+    Qf_diags = np.array([15.0, 15.0, 0.75, 0.75])
     Qf = np.diag(Qf_diags)
     control_params = PredictiveControlParams(N=150, 
-                                             dt=0.0075, 
+                                             dt=0.01, 
                                              K=500,
                                              Nu=20,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
-                                             N_elite=3,
-                                             CEM_iters=10)
+                                             N_elite=25,
+                                             CEM_iters=15)
 
     # create parametric distribution parameters
     mean_r = 0.0          # [m/s]
     mean_theta = 0.0      # [rad/s]
-    std_dev_r = 1.0      # [m/s]
-    std_dev_theta = np.pi   # [rad/s]
+    std_dev_r = 0.375      # [m/s]
+    std_dev_theta = np.pi/2   # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -921,8 +918,8 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.8],              # pz com
-                       [0],                # vx com
-                       [0],                # vz com
+                       [1],                # vx com
+                       [1],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[None], [None]])
@@ -949,10 +946,10 @@ if __name__ == "__main__":
     print(len(d))
     print(viability)
 
-    # np.savetxt('./data/slip/time.csv', t, delimiter=',')
-    # np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
-    # np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
-    # np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
-    # np.savetxt('./data/slip/input.csv', u.T, delimiter=',')
-    # np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
-    # np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')
+    np.savetxt('./data/slip/time.csv', t, delimiter=',')
+    np.savetxt('./data/slip/state_com.csv', x_sys.T, delimiter=',')
+    np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
+    np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
+    np.savetxt('./data/slip/input.csv', u.T, delimiter=',')
+    np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
+    np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')
