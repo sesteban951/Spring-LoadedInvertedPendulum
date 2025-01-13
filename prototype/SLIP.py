@@ -51,6 +51,8 @@ class ParametricDistribution:
     family: str          # distribution family, 'G' Gaussian, 'U' Uniform
     mean: np.array       # mean of the distribution
     cov: np.array        # covaraince of the distribution (Guassian only)
+    diag_only: bool      # diagonal only covariance (Gaussian only)
+    min_var: np.array    # minimum variance of the distribution (Gaussian only)
     lb: np.array         # lower bound of the distribution (Uniform only)
     ub: np.array         # upper bound of the distribution (Uniform only)
 
@@ -646,42 +648,40 @@ class PredictiveController:
         px_0 = x0_com[0]
 
         # initilize the reference trajectory
-        X_com_des = np.zeros((4, N))
-        X_com_des[1, :] = np.ones((1, N)) * pz_des
-        X_com_des[2, :] = np.ones((1, N)) * vx_des
-        X_com_des[3, :] = np.zeros((1, N))
+        X_des = np.zeros((8, N))
+        X_des[1, :] = np.ones((1, N)) * pz_des
+        X_des[2, :] = np.ones((1, N)) * vx_des
+        X_des[4, :] = np.ones((1, N)) * self.sys_params.l0
 
         # generate the reference trajectory
         for i in range(0, N):
             t = i * dt
             px_des = px_0 + vx_des * t
-            X_com_des[0, i] = px_des[0]
+            X_des[0, i] = px_des[0]
 
-        return X_com_des
+        return X_des
 
     # cost function evaluation
-    def cost_function(self, X_com_des, sol):
+    def cost_function(self, X_des, sol):
         """
         Evaulate the cost function given a propagated and desired trajecotry.
         """
         # unpack solution
         # sol = (T, xt_sys, xt_leg, xt_foot, lambd_t, D, viability)
         # T = sol[0]
-        X_com = sol[1]
-        # X_leg = sol[2]
+        X_sys = sol[1]
+        X_leg = sol[2]
         # X_foot = sol[3]
         # U = sol[4]
         # Lambd = sol[5]
         # D = sol[6]
         # viability = sol[7]
 
-        # if the pendulum falls assign infinite cost
-        # if viability == False:
-        #     total_cost = np.inf
+        # full SLIP state, com and leg states
+        X_com = X_sys[:4, :]
+        X = np.vstack((X_com, X_leg))
 
-        # # viable solution, compute the cost
-        # elif viability == True:
-        # unpack some cost parameters
+        # cost function variables
         Q = self.ctrl_params.Q
         Qf = self.ctrl_params.Qf
 
@@ -689,19 +689,19 @@ class PredictiveController:
         state_cost = 0.0
         for i in range(0, self.N-1):
             # compute error
-            xi_com = X_com[:4, i]   
-            xi_com_des = X_com_des[:, i]
-            e_com = (xi_com - xi_com_des).reshape(4, 1)
+            xi = X[:, i]   
+            xi_des = X_des[:, i]
+            e_com = (xi - xi_des).reshape(8, 1)
 
             # compute cost
             cost = e_com.T @ Q @ e_com
             state_cost += cost
 
         # terminal cost
-        xf_com = X_com[:4, self.N-1]
-        xf_com_des = X_com_des[:, self.N-1]
-        ef_com = (xf_com - xf_com_des).reshape(4, 1)
-        terminal_cost = ef_com.T @ Qf @ ef_com
+        xf= X[:, self.N-1]
+        xf_des = X_des[:, self.N-1]
+        ef = (xf - xf_des).reshape(8, 1)
+        terminal_cost = ef.T @ Qf @ ef
 
         # total cost
         total_cost = state_cost + terminal_cost
@@ -710,7 +710,7 @@ class PredictiveController:
         return total_cost
     
     # perform horizon rollouts
-    def monte_carlo(self, x0_sys, p0_foot, D0, U_list):
+    def monte_carlo(self, x0_sys, p0_foot, D0, U_list, pz_des, vx_des):
 
         # generate the time arrays
         Tx = np.arange(0, self.N) * self.dt
@@ -718,13 +718,9 @@ class PredictiveController:
 
         # preallocate the the containers
         J_list = np.zeros((1, self.K))            # cost function list
-        # U_list = np.zeros((2, self.Nu, self.K))    # input trajectory list
         S_list = [None for _ in range(self.K)]    # solution list
 
         # generate the reference trajectory
-        # TODO: right now these are hard coded, eventually will be passed in
-        vx_des = 0.0
-        pz_des = 0.65
         X_des = self.generate_reference_trajectory(x0_sys, pz_des, vx_des)
 
         # perform the rollouts
@@ -753,7 +749,7 @@ class PredictiveController:
         return S_list, U_list, J_list
     
     # perform sampling based predictive control
-    def predictive_control(self, x0_sys, p_foot, D0):
+    def predictive_control(self, x0_sys, p_foot, D0, pz_des, vx_des):
         """
         Perform sampling predictive control
         """
@@ -771,7 +767,7 @@ class PredictiveController:
 
             # perform the monte carlo simulation
             t0 = time.time()
-            S_ascending, U_ascending, J_ascending = ctrl.monte_carlo(x0_sys, p_foot, D0, U_list)
+            S_ascending, U_ascending, J_ascending = ctrl.monte_carlo(x0_sys, p_foot, D0, U_list, pz_des, vx_des)
             tf = time.time()
             print('Elapsed time: ', tf - t0)
             print('Average time spent per rollout: ', (tf - t0) / control_params.K) 
@@ -812,13 +808,11 @@ class PredictiveController:
             # compute the sample covariance (Ne-1 becuase of Bessel correction)
             cov_t = (1 / (self.N_elite-1) ) * (U_t - mean_t) @ (U_t - mean_t).T
 
-            # TODO: these should be custom options
             # keep only the diagonal elements
-            cov_t_diags = np.diag(np.diag(cov_t))
-            min_diag = np.array([[0.2**2],
-                                 [np.pi/5**2]])
-            cov_t_diags = np.maximum(cov_t_diags, min_diag)
-            cov_t = np.diag(np.diag(cov_t_diags))
+            if self.distr_params.diag_only == True:
+                cov_t_diags = np.diag(np.diag(cov_t))
+                cov_t_diags = np.maximum(cov_t_diags, self.distr_params.min_var)
+                cov_t = np.diag(np.diag(cov_t_diags))
 
             # insert into the mean and covariance
             mu[(2*i):(2*i+2)] = mean_t
@@ -844,11 +838,11 @@ if __name__ == "__main__":
 
     # np.random.seed(0)
 
-    # declare the system parameters
+    # SYSTEM PARAMS
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=7500.0, 
-                                 b=250.0,
+                                 b=100.0,
                                  l0=0.65,
                                  r_min=0.4,
                                  r_max=0.8,
@@ -857,26 +851,27 @@ if __name__ == "__main__":
                                  rdot_lim=1.0,
                                  thetadot_lim=np.pi/2)
 
-    # declare control parameters
-    Q_diags = np.array([10.0, 10.0, 0.75, 0.75])
+    # CONTROl PARAMS
+    Q_diags = np.array([5.0, 5.0, 0.1, 0.1,   # COM: px, pz, vx, vz 
+                        0.05, 2.0, 0.05, 0.05])  # LEG: r, theta, rdot, thetadot
+    Qf_diags = 2 * Q_diags
     Q = np.diag(Q_diags)
-    Qf_diags = np.array([15.0, 15.0, 0.75, 0.75])
     Qf = np.diag(Qf_diags)
     control_params = PredictiveControlParams(N=150, 
                                              dt=0.01, 
                                              K=500,
-                                             Nu=20,
+                                             Nu=25,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
-                                             N_elite=25,
+                                             N_elite=10,
                                              CEM_iters=15)
 
     # create parametric distribution parameters
-    mean_r = 0.0          # [m/s]
-    mean_theta = 0.0      # [rad/s]
-    std_dev_r = 0.375      # [m/s]
-    std_dev_theta = np.pi/2   # [rad/s]
+    mean_r = 0.0             # [m/s]
+    mean_theta = 0.0         # [rad/s]
+    std_dev_r = 0.375        # [m/s]
+    std_dev_theta = np.pi/2  # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -902,10 +897,13 @@ if __name__ == "__main__":
     ones_vec = np.ones((control_params.Nu, 1))
     lb_initial = np.kron(ones_vec, lb)
     ub_initial = np.kron(ones_vec, ub)
-    
+
+    # DISTRIBUTION PARAMS    
     distribution_params = ParametricDistribution(family='G',
                                                  mean=mean_initial,
                                                  cov=cov_initial,
+                                                 diag_only=True,
+                                                 min_var = np.array([[0.1**2], [np.pi/5**2]]),
                                                  lb=lb_initial,
                                                  ub=ub_initial)
 
@@ -918,15 +916,19 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.8],              # pz com
-                       [1],                # vx com
-                       [1],                # vz com
+                       [0],                # vx com
+                       [0],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
-    # MONTE CARLO
-    sol = ctrl.predictive_control(x0_sys, p0_foot, D0)
+    # desired velocity and height
+    pz_des = 0.7
+    vx_des = 0.1
+
+    # Prediciton horizon optimization
+    sol = ctrl.predictive_control(x0_sys, p0_foot, D0, pz_des, vx_des)
 
     t = sol[0]
     x_sys = sol[1]
