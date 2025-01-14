@@ -15,7 +15,6 @@ theta_deg = -atan2(r(1), -r(2)) * 180/pi
 % generate one torque vector
 tau_bounds = [-1, 1];
 tau = unifrnd(tau_bounds(1), tau_bounds(2), 1, 1)
-% tau_norm = norm(tau, 2)
 
 % compute the force vector
 f_unit = [cos(theta), -sin(theta)]';

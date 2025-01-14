@@ -48,7 +48,7 @@ for i = 1:length(domain)
 end
 
 animate = 1;
-rt = 0.5; % realtime rate
+rt = 1.0; % realtime rate
 replays = 3;
 save_video = 0;
 plot_com = 0;

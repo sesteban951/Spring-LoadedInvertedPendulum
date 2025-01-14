@@ -16,17 +16,21 @@ class SystemParams:
     """
     System parameters
     """
-    m: float            # mass [kg]
-    g: float            # gravity [m/s^2]
-    k: float            # spring stiffness [N/m]
-    b: float            # damping coefficient [Ns/m]
-    l0: float           # spring free length [m]
-    r_min: float        # leg min length [m]
-    r_max: float        # leg max length [m]
-    theta_min: float    # revolute leg min angle [rad]
-    theta_max: float    # revolute leg max angle [rad]
-    rdot_lim: float     # leg vel max velocity [m/s]
-    thetadot_lim: float # revolute leg max angular velocity [rad/s]
+    m: float                # mass [kg]
+    g: float                # gravity [m/s^2]
+    k: float                # spring stiffness [N/m]
+    b: float                # damping coefficient [Ns/m]
+    l0: float               # spring free length [m]
+    r_min: float            # leg min length [m]
+    r_max: float            # leg max length [m]
+    theta_min: float        # revolute leg min angle [rad]
+    theta_max: float        # revolute leg max angle [rad]
+    rdot_lim: float         # leg vel max velocity [m/s]
+    thetadot_lim: float     # revolute leg max angular velocity [rad/s]
+    torque_ankle: bool      # ankle torque enabled
+    torque_ankle_lim: float # ankle torque limit [Nm]
+    torque_ankle_kp: float  # ankle torque proportional gain
+    torque_ankle_kd: float  # ankle torque derivative gain
 
 @dataclass
 class PredictiveControlParams:
@@ -80,6 +84,10 @@ class MDROM:
         self.theta_max = system_params.theta_max
         self.rdot_lim = system_params.rdot_lim
         self.thetadot_lim = system_params.thetadot_lim
+        self.torque_ankle = system_params.torque_ankle
+        self.torque_ankle_lim = system_params.torque_ankle_lim
+        self.torque_ankle_kp = system_params.torque_ankle_kp
+        self.torque_ankle_kd = system_params.torque_ankle_kd
 
         # initialize control parameters
         self.dt = control_params.dt
@@ -107,6 +115,10 @@ class MDROM:
 
         # Flight domain (F)
         if d == 'F':
+
+            # no torque applied
+            torque_ankle = 0.0
+
             # compute the dynamics
             a_com = np.array([[0],  
                               [-g]])
@@ -119,7 +131,7 @@ class MDROM:
         elif d == 'G':
 
             # unpack leg positions
-            l0_hat = x_sys[4]     # command leg length
+            l0_hat = x_sys[4]       # command leg length
 
             # compute the leg state
             r_vec = p_foot - p_com
@@ -130,15 +142,43 @@ class MDROM:
             rdot_vec = -v_com
             rdot_x = rdot_vec[0][0]
             rdot_z = rdot_vec[1][0]
-            thetadot_hat = r_hat.T @ np.array([[rdot_x], [-rdot_z]]) # passive leg angular velocity
+            thetadot = r_hat.T @ np.array([[-rdot_z], [rdot_x]]) # passive leg angular velocity
 
             # compute the groundreaction force
             lambd = -r_hat * (k * (l0_hat - r_norm) + b * (v_com.T @ r_hat))
 
+            # compute the equivalent force from ankle torque (force prependicular to the leg applied at COM)
+            if self.torque_ankle == True:
+                # references to track
+                theta_command = x_sys[5][0] # theta_hat
+                thetadot_command = u[1]  # thetadot_hat
+
+                # get current leg state
+                x_leg, _ = self.update_leg_state(x_sys, p_foot, u, 'G')
+                theta = x_leg[1][0]
+
+                # compute the ankle torque
+                kp = self.torque_ankle_kp
+                kd = self.torque_ankle_kd
+                torque_ankle = kp * (theta_command - theta) + kd * (thetadot_command - thetadot[0][0])
+
+                # saturate the torque
+                torque_ankle = np.clip(torque_ankle, -self.torque_ankle_lim, self.torque_ankle_lim)
+
+                f_unit = np.array([[np.cos(theta)], 
+                                   [-np.sin(theta)]])
+                f_mag = torque_ankle / r_norm
+                f_com = f_mag * f_unit
+
+            # no leg torque, set the force to zero
+            elif self.torque_ankle == False:
+                torque_ankle = 0.0
+                f_com = np.array([[0], [0]])
+
             # compute the dynamics
-            a_com = (1/m) * lambd + np.array([[0], [-g]])
+            a_com = (1/m) * lambd + np.array([[0], [-g]]) + (1/m) * f_com
             v_leg = np.array([[u[0]],
-                              [thetadot_hat[0][0]]])
+                              [thetadot[0][0]]])
 
             xdot = np.vstack((v_com, a_com, v_leg))
 
@@ -836,31 +876,33 @@ class PredictiveController:
 
 if __name__ == "__main__":
 
-    # np.random.seed(0)
-
     # SYSTEM PARAMS
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
                                  k=7500.0, 
-                                 b=100.0,
+                                 b=75.0,
                                  l0=0.65,
                                  r_min=0.4,
                                  r_max=0.8,
                                  theta_min=-np.pi/3,
                                  theta_max=np.pi/3,
                                  rdot_lim=1.0,
-                                 thetadot_lim=np.pi/2)
+                                 thetadot_lim=np.pi/2,
+                                 torque_ankle=True,
+                                 torque_ankle_lim=50,
+                                 torque_ankle_kp=125,
+                                 torque_ankle_kd=10)
 
     # CONTROl PARAMS
-    Q_diags = np.array([5.0, 5.0, 0.1, 0.1,   # COM: px, pz, vx, vz 
-                        0.05, 2.0, 0.05, 0.05])  # LEG: r, theta, rdot, thetadot
-    Qf_diags = 2 * Q_diags
+    Q_diags = np.array([0.0, 5.0, 0.1, 0.1,    # COM: px, pz, vx, vz 
+                        5.0, 5.0, 0.1, 0.1]) # LEG: r, theta, rdot, thetadot
+    Qf_diags = 3 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
-    control_params = PredictiveControlParams(N=150, 
-                                             dt=0.01, 
+    control_params = PredictiveControlParams(N=100, 
+                                             dt=0.02, 
                                              K=500,
-                                             Nu=25,
+                                             Nu=30,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
@@ -871,7 +913,7 @@ if __name__ == "__main__":
     mean_r = 0.0             # [m/s]
     mean_theta = 0.0         # [rad/s]
     std_dev_r = 0.375        # [m/s]
-    std_dev_theta = np.pi/2  # [rad/s]
+    std_dev_theta = np.pi  # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -916,16 +958,16 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.8],              # pz com
-                       [0],                # vx com
-                       [0],                # vz com
+                       [0.5],                # vx com
+                       [0.5],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[None], [None]])
     D0 = 'F'  # initial domain
 
     # desired velocity and height
-    pz_des = 0.7
-    vx_des = 0.1
+    pz_des = 0.65
+    vx_des = 0.0
 
     # Prediciton horizon optimization
     sol = ctrl.predictive_control(x0_sys, p0_foot, D0, pz_des, vx_des)
