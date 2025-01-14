@@ -44,6 +44,8 @@ class PredictiveControlParams:
     interp: str    # interpolation method, 'Z' for zero order hold, 'L' for linear
     Q: np.array    # integrated state cost matrix
     Qf: np.array   # terminal state cost matrix
+    l0_rate_penalty: float  # control input penalty on rate of change
+    theta_rate_penalty: float  # control input penalty on rate of change
     N_elite: int   # number of elite rollouts
     CEM_iters: int # number of CEM iterations
 
@@ -702,20 +704,20 @@ class PredictiveController:
         return X_des
 
     # cost function evaluation
-    def cost_function(self, X_des, sol):
+    def cost_function(self, X_des, S, U):
         """
         Evaulate the cost function given a propagated and desired trajecotry.
         """
         # unpack solution
         # sol = (T, xt_sys, xt_leg, xt_foot, lambd_t, D, viability)
-        # T = sol[0]
-        X_sys = sol[1]
-        X_leg = sol[2]
-        # X_foot = sol[3]
-        # U = sol[4]
-        # Lambd = sol[5]
-        # D = sol[6]
-        # viability = sol[7]
+        # T = S[0]
+        X_sys = S[1]
+        X_leg = S[2]
+        # X_foot = S[3]
+        # U = S[4]
+        # Lambd = S[5]
+        # D = S[6]
+        # viability = S[7]
 
         # full SLIP state, com and leg states
         X_com = X_sys[:4, :]
@@ -724,6 +726,15 @@ class PredictiveController:
         # cost function variables
         Q = self.ctrl_params.Q
         Qf = self.ctrl_params.Qf
+
+        # input rate of change cost (discourage rapid changes in input)
+        l0_rate_penalty = self.ctrl_params.l0_rate_penalty
+        theta_hat_rate_penalty = self.ctrl_params.theta_rate_penalty
+        U_l0 = U[0, :]
+        U_theta_hat = U[1, :]
+        U_l0_rate = np.diff(U_l0)
+        U_theta_hat_rate = np.diff(U_theta_hat)
+        input_rate_cost = l0_rate_penalty * np.linalg.norm(U_l0_rate) + theta_hat_rate_penalty * np.linalg.norm(U_theta_hat_rate)
 
         # stage cost
         state_cost = 0.0
@@ -744,7 +755,7 @@ class PredictiveController:
         terminal_cost = ef.T @ Qf @ ef
 
         # total cost
-        total_cost = state_cost + terminal_cost
+        total_cost = state_cost + terminal_cost + input_rate_cost
         total_cost = total_cost[0][0]
 
         return total_cost
@@ -773,7 +784,7 @@ class PredictiveController:
             S = self.mdrom.RK3_rollout(Tx, Tu, x0_sys, p0_foot, U, D0)
 
             # evaluate the cost function
-            J = self.cost_function(X_des, S)
+            J = self.cost_function(X_des, S, U)
 
             # save the data
             J_list[:,k] = J
@@ -900,6 +911,8 @@ if __name__ == "__main__":
     Qf_diags = 1 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
+    l0_rate_penalty = 1.0
+    theta_rate_penalty = 1.0
     control_params = PredictiveControlParams(N=100, 
                                              dt=0.01, 
                                              K=500,
@@ -907,8 +920,10 @@ if __name__ == "__main__":
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
-                                             N_elite=15,
-                                             CEM_iters=15)
+                                             l0_rate_penalty=l0_rate_penalty,
+                                             theta_rate_penalty=theta_rate_penalty,
+                                             N_elite=20,
+                                             CEM_iters=3)
 
     # create parametric distribution parameters
     mean_r = 0.0             # [m/s]
@@ -959,8 +974,8 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.7],              # pz com
-                       [0.5],                # vx com
-                       [0.5],                # vz com
+                       [1.0],                # vx com
+                       [1.0],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[0.0], [0.0]])

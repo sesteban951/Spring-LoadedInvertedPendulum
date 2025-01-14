@@ -184,11 +184,12 @@ if animate == 0
     % INPUT
     subplot(3,6,[15,16]); 
     hold on; grid on;
-    plot(t, u(:,2), 'LineWidth', 2);
     plot(t, u(:,1), 'LineWidth', 2);
+    plot(t, u(:,2), 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('Input');
     title('l0 rate input');
+    legend('$l_0$', '$\theta$', 'interpreter', 'latex');
     grid on;
 
     % DOMAIN

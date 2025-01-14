@@ -16,13 +16,21 @@ class SystemParams:
     """
     System parameters
     """
-    m: float    # mass [kg]
-    g: float    # gravity [m/s^2]
-    k: float    # spring stiffness [N/m]
-    b: float    # damping coefficient [Ns/m]
-    l0: float   # spring free length [m]
-    lmin: float # spring min length [m]
-    lmax: float # spring max length [m]
+    m: float                # mass [kg]
+    g: float                # gravity [m/s^2]
+    k: float                # spring stiffness [N/m]
+    b: float                # damping coefficient [Ns/m]
+    l0: float               # spring free length [m]
+    r_min: float            # leg min length [m]
+    r_max: float            # leg max length [m]
+    theta_min: float        # revolute leg min angle [rad]
+    theta_max: float        # revolute leg max angle [rad]
+    rdot_lim: float         # leg vel max velocity [m/s]
+    thetadot_lim: float     # revolute leg max angular velocity [rad/s]
+    torque_ankle: bool      # ankle torque enabled
+    torque_ankle_lim: float # ankle torque limit [Nm]
+    torque_ankle_kp: float  # ankle torque proportional gain
+    torque_ankle_kd: float  # ankle torque derivative gain
 
 @dataclass
 class PredictiveControlParams:
