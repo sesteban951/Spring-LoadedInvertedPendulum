@@ -383,7 +383,7 @@ class MDROM:
 
             # compute leg force
             l0_hat = x_sys[4][0]
-            lambd = -r_hat * (self.k * (l0_hat - r) + self.b * rdot)
+            lambd = -r_hat * (self.k * (l0_hat - r) - self.b * rdot)
 
             # pack into state vectors
             x_leg = np.array([[r],
@@ -813,6 +813,7 @@ class PredictiveController:
             print('Average time spent per rollout: ', (tf - t0) / control_params.K) 
             print('Percent Failure Rate: ', np.sum(J_ascending==np.inf) / control_params.K)
             print('Failure: %d/%d' % (np.sum(J_ascending==np.inf), control_params.K))
+            print('Norm Covariance: ', np.linalg.norm(self.cov)) 
 
             # compute the new distribution
             if self.distr_params.family == 'G':
@@ -879,41 +880,41 @@ if __name__ == "__main__":
     # SYSTEM PARAMS
     system_params = SystemParams(m=35.0, 
                                  g=9.81, 
-                                 k=7500.0, 
-                                 b=75.0,
+                                 k=5000.0, 
+                                 b=50.0,
                                  l0=0.65,
                                  r_min=0.4,
                                  r_max=0.8,
                                  theta_min=-np.pi/3,
                                  theta_max=np.pi/3,
                                  rdot_lim=1.0,
-                                 thetadot_lim=np.pi/2,
+                                 thetadot_lim=np.pi,
                                  torque_ankle=True,
-                                 torque_ankle_lim=50,
+                                 torque_ankle_lim=10,
                                  torque_ankle_kp=125,
-                                 torque_ankle_kd=10)
+                                 torque_ankle_kd=5)
 
     # CONTROl PARAMS
-    Q_diags = np.array([0.0, 5.0, 0.1, 0.1,    # COM: px, pz, vx, vz 
-                        5.0, 5.0, 0.1, 0.1]) # LEG: r, theta, rdot, thetadot
-    Qf_diags = 3 * Q_diags
+    Q_diags = np.array([0.0, 5.0, 2.0, 0.05,    # COM: px, pz, vx, vz 
+                        5.0, 5.0, 0.1, 1.0])   # LEG: r, theta, rdot, thetadot
+    Qf_diags = 1 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
     control_params = PredictiveControlParams(N=100, 
-                                             dt=0.02, 
+                                             dt=0.01, 
                                              K=500,
-                                             Nu=30,
+                                             Nu=25,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
-                                             N_elite=10,
+                                             N_elite=15,
                                              CEM_iters=15)
 
     # create parametric distribution parameters
     mean_r = 0.0             # [m/s]
     mean_theta = 0.0         # [rad/s]
-    std_dev_r = 0.375        # [m/s]
-    std_dev_theta = np.pi  # [rad/s]
+    std_dev_r = 0.75          # [m/s]
+    std_dev_theta = np.pi/2  # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -957,16 +958,16 @@ if __name__ == "__main__":
 
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
-                       [0.8],              # pz com
+                       [0.7],              # pz com
                        [0.5],                # vx com
                        [0.5],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
-    p0_foot = np.array([[None], [None]])
+    p0_foot = np.array([[0.0], [0.0]])
     D0 = 'F'  # initial domain
 
     # desired velocity and height
-    pz_des = 0.65
+    pz_des = 0.60
     vx_des = 0.0
 
     # Prediciton horizon optimization

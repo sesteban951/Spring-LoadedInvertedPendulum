@@ -15,6 +15,31 @@ domain = textscan(fileID, '%s', 'Delimiter', ',');
 domain = char(domain{1});
 fclose(fileID);
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% segment the time
+t_interval = [t(1) t(end)];
+% t_interval = [0 1.0];
+
+% plotting / animation
+animate = 1;
+rt = 0.5; % realtime rate
+replays = 3;
+save_video = 0;
+plot_com = 0;
+plot_foot = 0;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+idx = find(t >= t_interval(1) & t <= t_interval(2));
+t = t(idx);
+x_sys = x_sys(idx,:);
+x_leg = x_leg(idx,:);
+x_foot = x_foot(idx,:);
+lambd = lambd(idx,:);
+u = u(idx,:);
+domain = domain(idx,:);
+
 % system state
 p_com = x_sys(:,1:2);
 v_com = x_sys(:,3:4);
@@ -46,13 +71,6 @@ for i = 1:length(domain)
         domain_int(i) = 0;
     end
 end
-
-animate = 1;
-rt = 1.0; % realtime rate
-replays = 3;
-save_video = 0;
-plot_com = 0;
-plot_foot = 0;
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
