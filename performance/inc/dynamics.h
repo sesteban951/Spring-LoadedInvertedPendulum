@@ -1,7 +1,10 @@
 // standard includes
 #include <iostream>
 #include "Eigen/Dense"
+#include "yaml-cpp/yaml.h"
+#include <vector>
 
+// struct to store system parameters
 struct SystemParams
 {
     double m;            // mass [kg]
@@ -20,12 +23,13 @@ struct SystemParams
     double torque_ankle_kd;           // derivative gain for ankle torque
 };
 
-// constructor
+// class for system dynamics
 class Dynamics
 {
     public:
         // Constructor
-        Dynamics(SystemParams params_);  
+        Dynamics(YAML::Node config_file);  
+        ~Dynamics(){};
 
         // System parameters
         SystemParams params;
