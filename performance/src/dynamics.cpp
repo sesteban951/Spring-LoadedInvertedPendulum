@@ -29,17 +29,14 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
     double b = this->params.b;
 
     // unpack the state vector
-    Vector_2d p_com;
-    Vector_2d v_com;
+    Vector_2d p_com, v_com;
     p_com << x(0), x(1);
     v_com << x(2), x(3);
 
     // vectors to use in the calculations
-    Vector_2d a_com;
-    Vector_2d v_leg;
-    Vector_2d g_vec;
-    g_vec << 0, -g;
+    Vector_2d a_com, v_leg, g_vec;
     Vector_6d xdot;
+    g_vec << 0, -g;
 
     // Flight domain dynamics (F)
     if (d == Domain::FLIGHT) {
@@ -53,32 +50,28 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
 
     // Ground domain dynamics (G)
     else if (d == Domain::GROUND) {
-        // compute the leg state
-        Vector_2d r_vec, r_hat, rdot_vec, lambd;
-        double r_norm, r_x, r_z, rdot_x, rdot_z, l0_command, tau_ankle;
 
         // compute the leg state
-        r_vec = p_foot - p_com;
-        r_norm = r_vec.norm();
-        r_hat = r_vec / r_norm;
-        r_x = r_vec(0);
-        r_z = r_vec(1);
+        Vector_2d r_vec = p_foot - p_com;
+        double r_norm = r_vec.norm();
+        Vector_2d r_hat = r_vec / r_norm;
+        double r_x = r_vec(0);
+        double r_z = r_vec(1);
 
-        rdot_vec = -v_com;
-        rdot_x = rdot_vec(0);
-        rdot_z = rdot_vec(1);
+        Vector_2d rdot_vec = -v_com;
+        double rdot_x = rdot_vec(0);
+        double rdot_z = rdot_vec(1);
 
         // compute the leg angular velocity
         double thetadot = (r_z * rdot_x - r_x * rdot_z) / (r_norm * r_norm);
 
         // leg length command
-        l0_command = u(0);
+        double l0_command = x(4);
         
-        // compute the groudn reaction force
-        lambd = -r_hat * (k * (l0_command - r_norm) - b * (-v_com.dot(r_hat)));
+        // compute the ground reaction force
+        Vector_2d lambd_vec = -r_hat * (k * (l0_command - r_norm) - b * (-v_com.dot(r_hat)));
 
         // compute the equivalent force from ankle torque (force prependicular to the leg applied at COM)
-        Vector_2d f_com;
         if (this->params.torque_ankle == true) {
             
             // actual angle state and command theta states
@@ -92,7 +85,7 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
             double tau_ankle = kp * (theta_command - theta) + kd * (thetadot_command - thetadot);
 
             // saturate the ankle torque
-            tau_ankle = std::max(-this->params.torque_ankle_lim, std::min(this->params.torque_ankle_lim, tau_ankle));
+            double tau_ankle = std::max(-this->params.torque_ankle_lim, std::min(this->params.torque_ankle_lim, tau_ankle));
 
             // compute the equivalent force from ankle torque
             Vector_2d f_com, f_unit;
@@ -103,14 +96,15 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
 
         // no ankle torque applied
         else if (this->params.torque_ankle == false) {
+            Vector_2d f_com;
             f_com << 0, 0;
         }
 
         // compute the stance dynamics
-        a_com = (1/m) * lambd + (1/m) * f_com + g_vec;
+        a_com = (1/m) * lambd_vec + (1/m) * f_com + g_vec;
 
         // compute the leg dynamics
-        v_leg << u(0), thetadot;
+        v_leg << u(0), thetadot; // TODO: shouldn't I keep using the command signal instead?
 
         // stack the acceleration and velocity vectors
         xdot << v_com, a_com, v_leg;
