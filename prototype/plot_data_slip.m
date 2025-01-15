@@ -10,6 +10,7 @@ x_leg = load('./data/slip/state_leg.csv');
 x_foot = load('./data/slip/state_foot.csv');
 lambd = load('./data/slip/lambd.csv');
 u = load('./data/slip/input.csv');
+u_ankle = load('./data/slip/input_ankle.csv');
 fileID = fopen('./data/slip/domain.csv', 'r');
 domain = textscan(fileID, '%s', 'Delimiter', ',');
 domain = char(domain{1});
@@ -22,7 +23,7 @@ t_interval = [t(1) t(end)];
 % t_interval = [0 1.0];
 
 % plotting / animation
-animate = 0;
+animate = 1;
 rt = 0.5; % realtime rate
 replays = 3;
 save_video = 0;
@@ -43,13 +44,7 @@ domain = domain(idx,:);
 % system state
 p_com = x_sys(:,1:2);
 v_com = x_sys(:,3:4);
-q_leg = x_sys(:,5:6);
-
-% leg states
-r = x_leg(:,1);
-theta = x_leg(:,2);
-rdot = x_leg(:,3);
-thetadot = x_leg(:,4);
+leg_pos_commands = x_sys(:,5:6);
 
 % foot states
 p_foot = x_foot(:,1:2);
@@ -95,18 +90,14 @@ if animate == 0
 
     subplot(3,6,7); 
     hold on; grid on;
-    % vx_sys = diff(p_com(:,1))./diff(t);
     plot(t, v_com(:,1), 'LineWidth', 2);
-    % plot(t(1:end-1), vx_sys, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$v_x$ [m/s]', 'Interpreter', 'latex');
     title('x-vel');
 
     subplot(3,6,8);
     hold on; grid on;
-    % vz_com = diff(p_com(:,2))./diff(t);
     plot(t, v_com(:,2), 'LineWidth', 2);
-    % plot(t(1:end-1), vz_com, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$v_z$ [m/s]', 'Interpreter', 'latex');
     title('z-vel');
@@ -114,35 +105,39 @@ if animate == 0
     % LEG STATES
     subplot(3,6,3);
     hold on; grid on;
-    plot(t, r, 'LineWidth', 2);
-    plot(t, q_leg(:,1), 'LineWidth', 1.0);
+    plot(t, x_leg(:,1), 'LineWidth', 2);
+    plot(t, leg_pos_commands(:,1), 'LineWidth', 1.0);
     xlabel('Time [sec]');
     ylabel('$r$ [m]', 'Interpreter', 'latex');
     title('Leg Length, r');
-    legend('leg', 'command');
+    legend('actual', 'command');
 
     subplot(3,6,4);
     hold on; grid on;
-    plot(t, theta, 'LineWidth', 2);
-    plot(t, q_leg(:,2), 'LineWidth', 1.0);
+    plot(t, x_leg(:,2), 'LineWidth', 2);
+    plot(t, leg_pos_commands(:,2), 'LineWidth', 1.0);
     xlabel('Time [sec]');
     ylabel('$\theta$ [rad]', 'Interpreter', 'latex');
     title('Leg Angle, theta');
-    legend('leg', 'command');
+    legend('actual', 'command');
 
     subplot(3,6,9);
     hold on; grid on;
-    plot(t, rdot, 'LineWidth', 2);
+    plot(t, x_leg(:,3), 'LineWidth', 2);
+    plot(t, u(:,1), 'LineWidth', 1.0);
     xlabel('Time [sec]');
     ylabel('$\dot{r}$ [m/s]', 'Interpreter', 'latex');
     title('Leg Length Rate, r-dot');
+    legend('actual', 'command');
 
     subplot(3,6,10);
     hold on; grid on;
-    plot(t, thetadot, 'LineWidth', 2);
+    plot(t, x_leg(:,4), 'LineWidth', 2);
+    plot(t, u(:,2), 'LineWidth', 1.0);
     xlabel('Time [sec]');
     ylabel('$\dot{\theta}$ [rad/s]', 'Interpreter', 'latex');
     title('Leg Angle Rate, theta-dot');
+    legend('actual', 'command');
 
     % FOOT STATES
     subplot(3,6,5);
@@ -174,11 +169,19 @@ if animate == 0
     grid on;
 
     % LAMBDA
-    subplot(3,6,[13,14]);
+    subplot(3,6,13);
     plot(t, lambda_mag, 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('$\lambda$ [N]', 'Interpreter', 'latex');
     title('Lambda Magnitude');
+    grid on;
+
+    % ANKLE
+    subplot(3,6,14);
+    plot(t, u_ankle, 'LineWidth', 2);
+    xlabel('Time [sec]');
+    ylabel('$\tau$ [Nm]', 'Interpreter', 'latex');
+    title('Torque Ankle');
     grid on;
 
     % INPUT

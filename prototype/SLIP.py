@@ -156,16 +156,17 @@ class MDROM:
                 thetadot_command = u[1]  # thetadot_hat
 
                 # get current leg state
-                x_leg, _ = self.update_leg_state(x_sys, p_foot, u, 'G')
-                theta = x_leg[1][0]
+                r_x = r_vec[0][0]
+                r_z = r_vec[1][0]
+                theta = -np.arctan2(r_x, -r_z)
 
                 # compute the ankle torque
                 kp = self.torque_ankle_kp
                 kd = self.torque_ankle_kd
                 torque_ankle = kp * (theta_command - theta) + kd * (thetadot_command - thetadot[0][0])
-
+                # torque_ankle = -torque_ankle
                 # saturate the torque
-                torque_ankle = np.clip(torque_ankle, -self.torque_ankle_lim, self.torque_ankle_lim)
+                # torque_ankle = np.clip(torque_ankle, -self.torque_ankle_lim, self.torque_ankle_lim)
 
                 f_unit = np.array([[np.cos(theta)], 
                                    [-np.sin(theta)]])
@@ -179,12 +180,14 @@ class MDROM:
 
             # compute the dynamics
             a_com = (1/m) * lambd + np.array([[0], [-g]]) + (1/m) * f_com
+            # v_leg = np.array([[u[0]],
+            #                   [thetadot[0][0]]])  # TODO: think carefully here, should't I use the commanded thetadot not the actual one?
             v_leg = np.array([[u[0]],
-                              [thetadot[0][0]]])
+                              [u[1]]])  
 
             xdot = np.vstack((v_com, a_com, v_leg))
 
-        return xdot
+        return xdot, torque_ankle
 
     # interpolate the control input
     def interpolate_control_input(self, t, T, U):
@@ -234,6 +237,7 @@ class MDROM:
         xt_leg = np.zeros((4, N))
         xt_foot = np.zeros((4, N))
         ut = np.zeros((2, N))
+        ut_ankle = np.zeros((1, N))
         lambd_t = np.zeros((2, N))
         D = [None for _ in range(N)]
 
@@ -272,18 +276,18 @@ class MDROM:
             u3 = self.interpolate_control_input(t3, Tu, U)
 
             # RK3 vector fields
-            f1 = self.dynamics(xk_sys, 
-                               p_foot,
-                               u1, 
-                               Dk)
-            f2 = self.dynamics(xk_sys + dt/2 * f1, 
-                               p_foot, 
-                               u2, 
-                               Dk)
-            f3 = self.dynamics(xk_sys - dt*f1 + 2*dt*f2, 
-                               p_foot,
-                               u3, 
-                               Dk)
+            f1, _ = self.dynamics(xk_sys, 
+                                  p_foot,
+                                  u1, 
+                                  Dk)
+            f2, tau_ankle = self.dynamics(xk_sys + dt/2 * f1, 
+                                  p_foot, 
+                                  u2, 
+                                  Dk)
+            f3, _ = self.dynamics(xk_sys - dt*f1 + 2*dt*f2, 
+                                  p_foot,
+                                  u3, 
+                                  Dk)
 
             # RK3 step and update all states
             xk_sys = xk_sys + (dt/6) * (f1 + 4*f2 + f3)
@@ -325,13 +329,14 @@ class MDROM:
             xt_leg[:, i+1] = xk_leg.reshape(4)
             xt_foot[:, i+1] = xk_foot.reshape(4)
             ut[:, i+1] = u3.reshape(2)
+            ut_ankle[:, i+1] = tau_ankle
             lambd_t[:, i+1] = lambd.reshape(2)
 
             # store the domain
             D[i+1] = Dk
 
         # package into a solution
-        sol = (Tx, xt_sys, xt_leg, xt_foot, ut, lambd_t, D, viability)
+        sol = (Tx, xt_sys, xt_leg, xt_foot, ut, ut_ankle, lambd_t, D, viability)
 
         return sol
 
@@ -571,7 +576,7 @@ class MDROM:
             x_leg_post[3] = u[1]
             lambd_post = np.array([[0], [0]])
 
-            # update the system 
+            # update the system  # TODO: Shouldnt I just keep integrating the command?
             x_sys_post = x_sys
             x_sys_post[4] = x_leg_post[0]  # the l0 & theta_hat, commands were being integrating during
             x_sys_post[5] = x_leg_post[1]  # ground phase, now snap back to the actual leg state
@@ -715,9 +720,10 @@ class PredictiveController:
         X_leg = S[2]
         # X_foot = S[3]
         # U = S[4]
-        # Lambd = S[5]
-        # D = S[6]
-        # viability = S[7]
+        # U_ankle = S[5]
+        # Lambd = S[6]
+        # D = S[7]
+        # viability = S[8]
 
         # full SLIP state, com and leg states
         X_com = X_sys[:4, :]
@@ -848,28 +854,63 @@ class PredictiveController:
 
         # calculate the means and covariances of each control knot
         # TODO: I think I'm computing this wrong, shouldn't I compute a covariance on the giatn vector trajectories?
-        mu = np.zeros((2 * self.Nu, 1))
-        cov = np.zeros((2 * self.Nu, 2 * self.Nu))
-        for i in range(0, self.Nu):
+        # mu = np.zeros((2 * self.Nu, 1))
+        # cov = np.zeros((2 * self.Nu, 2 * self.Nu))
+        # for i in range(0, self.Nu):
 
-            # calculate the mean at control knot i
-            U_t = np.zeros((2, self.N_elite))
-            for j in range(0, self.N_elite):
-                U_t[:, j] = U_elite[:, i, j]
-            mean_t = np.mean(U_t, axis=1).reshape(2, 1)
+        #     # calculate the mean at control knot i
+        #     U_t = np.zeros((2, self.N_elite))
+        #     for j in range(0, self.N_elite):
+        #         U_t[:, j] = U_elite[:, i, j]
+        #     mean_t = np.mean(U_t, axis=1).reshape(2, 1)
 
-            # compute the sample covariance (Ne-1 becuase of Bessel correction)
-            cov_t = (1 / (self.N_elite-1) ) * (U_t - mean_t) @ (U_t - mean_t).T
+        #     # compute the sample covariance (Ne-1 becuase of Bessel correction)
+        #     cov_t = (1 / (self.N_elite-1) ) * (U_t - mean_t) @ (U_t - mean_t).T
 
-            # keep only the diagonal elements
-            if self.distr_params.diag_only == True:
-                cov_t_diags = np.diag(np.diag(cov_t))
-                cov_t_diags = np.maximum(cov_t_diags, self.distr_params.min_var)
-                cov_t = np.diag(np.diag(cov_t_diags))
+        #     # keep only the diagonal elements
+        #     if self.distr_params.diag_only == True:
+        #         cov_t_diags = np.diag(np.diag(cov_t))
+        #         cov_t_diags = np.maximum(cov_t_diags, self.distr_params.min_var)
+        #         cov_t = np.diag(np.diag(cov_t_diags))
 
-            # insert into the mean and covariance
-            mu[(2*i):(2*i+2)] = mean_t
-            cov[(2*i):(2*i+2) , (2*i):(2*i+2)] = cov_t
+        #     # insert into the mean and covariance
+        #     mu[(2*i):(2*i+2)] = mean_t
+        #     cov[(2*i):(2*i+2) , (2*i):(2*i+2)] = cov_t
+
+        # build a input data matrix
+        U_data = np.zeros((2 * self.Nu, self.N_elite)) # each column is a vectorized input signal
+        for i in range(0, self.N_elite):
+            
+            # container for the input signal
+            U_t = U_elite[:,:,i]
+            U_t_flat = np.zeros((2 * self.Nu, 1))
+            
+            # insert into the input data matrix
+            for j in range(0, self.Nu):
+                U_t_flat[2*j:2*j+2] = U_t[:, j].reshape(2, 1)
+            U_data[:, i] = U_t_flat.flatten()
+
+        # compute the mean and covariance
+        mu = np.mean(U_data, axis=1).reshape(2 * self.Nu, 1)
+        cov = (1/(self.N_elite-1)) * (U_data - mu) @ (U_data - mu).T
+        
+        # np.set_printoptions(precision=3)
+        # print(mu.shape)
+        # print(U_data.shape)
+        # print((U_data-mu).shape)
+        # print(cov.shape)
+        # print(cov)
+
+        # eigs = np.linalg.eigvals(cov)
+        # print(eigs)
+
+        cov = np.diag(np.diag(cov))
+        # print(cov)
+        # eigs = np.linalg.eigvals(cov)
+        # print(eigs)
+
+        # do an eigenvalue decomp
+
 
         return mu, cov
     
@@ -890,10 +931,10 @@ class PredictiveController:
 if __name__ == "__main__":
 
     # SYSTEM PARAMS
-    system_params = SystemParams(m=35.0, 
+    system_params = SystemParams(m=5.0, 
                                  g=9.81, 
                                  k=5000.0, 
-                                 b=50.0,
+                                 b=75.0,
                                  l0=0.65,
                                  r_min=0.4,
                                  r_max=0.8,
@@ -902,34 +943,34 @@ if __name__ == "__main__":
                                  rdot_lim=1.0,
                                  thetadot_lim=np.pi,
                                  torque_ankle=True,
-                                 torque_ankle_lim=10,
-                                 torque_ankle_kp=125,
-                                 torque_ankle_kd=5)
+                                 torque_ankle_lim=20000,
+                                 torque_ankle_kp=1000*2,
+                                 torque_ankle_kd=50*2)
 
     # CONTROl PARAMS
-    Q_diags = np.array([0.0, 5.0, 2.0, 0.05,    # COM: px, pz, vx, vz 
-                        5.0, 5.0, 0.1, 1.0])   # LEG: r, theta, rdot, thetadot
-    Qf_diags = 1 * Q_diags
+    Q_diags = np.array([0.0, 5.0, 0.1, 0.05,    # COM: px, pz, vx, vz 
+                        0.5, 2.0, 0.05, 0.05])   # LEG: r, theta, rdot, thetadot
+    Qf_diags = 3 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
-    l0_rate_penalty = 0.1
-    theta_rate_penalty = 0.1
-    control_params = PredictiveControlParams(N=100, 
+    l0_rate_penalty = 0.01
+    theta_rate_penalty = 0.01
+    control_params = PredictiveControlParams(N=50, 
                                              dt=0.01, 
                                              K=500,
-                                             Nu=25,
+                                             Nu=10,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
                                              l0_rate_penalty=l0_rate_penalty,
                                              theta_rate_penalty=theta_rate_penalty,
-                                             N_elite=20,
-                                             CEM_iters=20)
+                                             N_elite=25,
+                                             CEM_iters=2)
 
     # create parametric distribution parameters
     mean_r = 0.0             # [m/s]
     mean_theta = 0.0         # [rad/s]
-    std_dev_r = 0.75          # [m/s]
+    std_dev_r = 0.5          # [m/s]
     std_dev_theta = np.pi/2  # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
@@ -975,8 +1016,8 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.7],              # pz com
-                       [1.0],                # vx com
-                       [1.0],                # vz com
+                       [0],                # vx com
+                       [0],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[0.0], [0.0]])
@@ -994,15 +1035,17 @@ if __name__ == "__main__":
     x_leg = sol[2]
     x_foot = sol[3]
     u = sol[4]
-    lambd = sol[5]
-    d = sol[6]
-    viability = sol[7]
+    u_ankle = sol[5]
+    lambd = sol[6]
+    d = sol[7]
+    viability = sol[8]
 
     print(t.shape)
     print(x_sys.shape)
     print(x_leg.shape)
     print(x_foot.shape)
     print(u.shape)
+    print(u_ankle.shape)
     print(lambd.shape)
     print(len(d))
     print(viability)
@@ -1012,5 +1055,6 @@ if __name__ == "__main__":
     np.savetxt('./data/slip/state_leg.csv', x_leg.T, delimiter=',')
     np.savetxt('./data/slip/state_foot.csv', x_foot.T, delimiter=',')
     np.savetxt('./data/slip/input.csv', u.T, delimiter=',')
+    np.savetxt('./data/slip/input_ankle.csv', u_ankle.T, delimiter=',')
     np.savetxt('./data/slip/lambd.csv', lambd.T, delimiter=',')
     np.savetxt('./data/slip/domain.csv', d, delimiter=',', fmt='%s')
