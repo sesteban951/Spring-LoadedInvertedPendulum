@@ -164,9 +164,9 @@ class MDROM:
                 kp = self.torque_ankle_kp
                 kd = self.torque_ankle_kd
                 torque_ankle = kp * (theta_command - theta) + kd * (thetadot_command - thetadot[0][0])
-                # torque_ankle = -torque_ankle
+                
                 # saturate the torque
-                # torque_ankle = np.clip(torque_ankle, -self.torque_ankle_lim, self.torque_ankle_lim)
+                torque_ankle = np.clip(torque_ankle, -self.torque_ankle_lim, self.torque_ankle_lim)
 
                 f_unit = np.array([[np.cos(theta)], 
                                    [-np.sin(theta)]])
@@ -180,8 +180,6 @@ class MDROM:
 
             # compute the dynamics
             a_com = (1/m) * lambd + np.array([[0], [-g]]) + (1/m) * f_com
-            # v_leg = np.array([[u[0]],
-            #                   [thetadot[0][0]]])  # TODO: think carefully here, should't I use the commanded thetadot not the actual one?
             v_leg = np.array([[u[0]],
                               [u[1]]])  
 
@@ -852,31 +850,6 @@ class PredictiveController:
         # select the elite rollouts
         U_elite = U_list[:, :, 0:self.N_elite]
 
-        # calculate the means and covariances of each control knot
-        # TODO: I think I'm computing this wrong, shouldn't I compute a covariance on the giatn vector trajectories?
-        # mu = np.zeros((2 * self.Nu, 1))
-        # cov = np.zeros((2 * self.Nu, 2 * self.Nu))
-        # for i in range(0, self.Nu):
-
-        #     # calculate the mean at control knot i
-        #     U_t = np.zeros((2, self.N_elite))
-        #     for j in range(0, self.N_elite):
-        #         U_t[:, j] = U_elite[:, i, j]
-        #     mean_t = np.mean(U_t, axis=1).reshape(2, 1)
-
-        #     # compute the sample covariance (Ne-1 becuase of Bessel correction)
-        #     cov_t = (1 / (self.N_elite-1) ) * (U_t - mean_t) @ (U_t - mean_t).T
-
-        #     # keep only the diagonal elements
-        #     if self.distr_params.diag_only == True:
-        #         cov_t_diags = np.diag(np.diag(cov_t))
-        #         cov_t_diags = np.maximum(cov_t_diags, self.distr_params.min_var)
-        #         cov_t = np.diag(np.diag(cov_t_diags))
-
-        #     # insert into the mean and covariance
-        #     mu[(2*i):(2*i+2)] = mean_t
-        #     cov[(2*i):(2*i+2) , (2*i):(2*i+2)] = cov_t
-
         # build a input data matrix
         U_data = np.zeros((2 * self.Nu, self.N_elite)) # each column is a vectorized input signal
         for i in range(0, self.N_elite):
@@ -893,24 +866,9 @@ class PredictiveController:
         # compute the mean and covariance
         mu = np.mean(U_data, axis=1).reshape(2 * self.Nu, 1)
         cov = (1/(self.N_elite-1)) * (U_data - mu) @ (U_data - mu).T
-        
-        # np.set_printoptions(precision=3)
-        # print(mu.shape)
-        # print(U_data.shape)
-        # print((U_data-mu).shape)
-        # print(cov.shape)
-        # print(cov)
-
-        # eigs = np.linalg.eigvals(cov)
-        # print(eigs)
-
         cov = np.diag(np.diag(cov))
-        # print(cov)
-        # eigs = np.linalg.eigvals(cov)
-        # print(eigs)
 
-        # do an eigenvalue decomp
-
+        # TODO: add a minimum variance constraint
 
         return mu, cov
     
@@ -943,35 +901,35 @@ if __name__ == "__main__":
                                  rdot_lim=1.0,
                                  thetadot_lim=np.pi,
                                  torque_ankle=True,
-                                 torque_ankle_lim=20000,
-                                 torque_ankle_kp=1000*2,
-                                 torque_ankle_kd=50*2)
+                                 torque_ankle_lim=5,
+                                 torque_ankle_kp=125,
+                                 torque_ankle_kd=10)
 
     # CONTROl PARAMS
-    Q_diags = np.array([0.0, 5.0, 0.1, 0.05,    # COM: px, pz, vx, vz 
-                        0.5, 2.0, 0.05, 0.05])   # LEG: r, theta, rdot, thetadot
-    Qf_diags = 3 * Q_diags
+    Q_diags = np.array([0.0, 5.0, 1.0, 0.05,     # COM: px, pz, vx, vz 
+                        0.5, 0., 0.05, 0.01])   # LEG: r, theta, rdot, thetadot
+    Qf_diags = 5 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
     l0_rate_penalty = 0.01
     theta_rate_penalty = 0.01
-    control_params = PredictiveControlParams(N=50, 
+    control_params = PredictiveControlParams(N=100, 
                                              dt=0.01, 
-                                             K=500,
-                                             Nu=10,
+                                             K=250,
+                                             Nu=25,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
                                              l0_rate_penalty=l0_rate_penalty,
                                              theta_rate_penalty=theta_rate_penalty,
                                              N_elite=25,
-                                             CEM_iters=2)
+                                             CEM_iters=10)
 
     # create parametric distribution parameters
     mean_r = 0.0             # [m/s]
     mean_theta = 0.0         # [rad/s]
-    std_dev_r = 0.5          # [m/s]
-    std_dev_theta = np.pi/2  # [rad/s]
+    std_dev_r = 1.0          # [m/s]
+    std_dev_theta = np.pi  # [rad/s]
 
     mean = np.array([[mean_r],              # r [m]
                      [mean_theta]])         # theta [rad]
@@ -1016,8 +974,8 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.7],              # pz com
-                       [0],                # vx com
-                       [0],                # vz com
+                       [1.0],                # vx com
+                       [1.0],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[0.0], [0.0]])
