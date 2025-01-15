@@ -866,9 +866,12 @@ class PredictiveController:
         # compute the mean and covariance
         mu = np.mean(U_data, axis=1).reshape(2 * self.Nu, 1)
         cov = (1/(self.N_elite-1)) * (U_data - mu) @ (U_data - mu).T
-        cov = np.diag(np.diag(cov))
+        
+        # TODO: have a flag for this
+        # cov = np.diag(np.diag(cov))
 
         # TODO: add a minimum variance constraint
+        # fill in the code here
 
         return mu, cov
     
@@ -889,9 +892,9 @@ class PredictiveController:
 if __name__ == "__main__":
 
     # SYSTEM PARAMS
-    system_params = SystemParams(m=5.0, 
+    system_params = SystemParams(m=35.0, 
                                  g=9.81, 
-                                 k=5000.0, 
+                                 k=7500.0, 
                                  b=75.0,
                                  l0=0.65,
                                  r_min=0.4,
@@ -901,29 +904,29 @@ if __name__ == "__main__":
                                  rdot_lim=1.0,
                                  thetadot_lim=np.pi,
                                  torque_ankle=True,
-                                 torque_ankle_lim=5,
+                                 torque_ankle_lim=10,
                                  torque_ankle_kp=125,
                                  torque_ankle_kd=10)
 
     # CONTROl PARAMS
-    Q_diags = np.array([0.0, 5.0, 1.0, 0.05,     # COM: px, pz, vx, vz 
-                        0.5, 0., 0.05, 0.01])   # LEG: r, theta, rdot, thetadot
-    Qf_diags = 5 * Q_diags
+    Q_diags = np.array([4.0, 4.0, 1.5, 0.05,     # COM: px, pz, vx, vz 
+                        1.5, 5.0, 0.05, 0.01])   # LEG: r, theta, rdot, thetadot
+    Qf_diags = 3 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
     l0_rate_penalty = 0.01
     theta_rate_penalty = 0.01
     control_params = PredictiveControlParams(N=100, 
-                                             dt=0.01, 
-                                             K=250,
+                                             dt=0.02, 
+                                             K=750,
                                              Nu=25,
                                              interp='L',
                                              Q=Q,
                                              Qf=Qf,
                                              l0_rate_penalty=l0_rate_penalty,
                                              theta_rate_penalty=theta_rate_penalty,
-                                             N_elite=25,
-                                             CEM_iters=10)
+                                             N_elite=100,
+                                             CEM_iters=20)
 
     # create parametric distribution parameters
     mean_r = 0.0             # [m/s]
@@ -974,16 +977,16 @@ if __name__ == "__main__":
     # initial conditions
     x0_sys = np.array([[0.0],              # px com
                        [0.7],              # pz com
-                       [1.0],                # vx com
-                       [1.0],                # vz com
+                       [0.5],              # vx com
+                       [0],                # vz com
                        [system_params.l0], # l0 command
                        [0.0]])             # theta command
     p0_foot = np.array([[0.0], [0.0]])
     D0 = 'F'  # initial domain
 
     # desired velocity and height
-    pz_des = 0.60
-    vx_des = 0.0
+    pz_des = 0.65
+    vx_des = 0.5
 
     # Prediciton horizon optimization
     sol = ctrl.predictive_control(x0_sys, p0_foot, D0, pz_des, vx_des)
