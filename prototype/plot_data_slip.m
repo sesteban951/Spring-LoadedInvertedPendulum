@@ -22,7 +22,7 @@ t_interval = [t(1) t(end)];
 % t_interval = [0 1.0];
 
 % plotting / animation
-animate = 1;
+animate = 0;
 rt = 0.5; % realtime rate
 replays = 3;
 save_video = 0;

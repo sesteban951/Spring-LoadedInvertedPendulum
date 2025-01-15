@@ -144,7 +144,7 @@ class MDROM:
             rdot_vec = -v_com
             rdot_x = rdot_vec[0][0]
             rdot_z = rdot_vec[1][0]
-            thetadot = r_hat.T @ np.array([[-rdot_z], [rdot_x]]) # passive leg angular velocity
+            thetadot = r_hat.T @ np.array([[-rdot_z], [rdot_x]]) / r_norm # TODO: isnt it divided by r, See my math to confirm... I think it is? Changed it
 
             # compute the groundreaction force
             lambd = -r_hat * (k * (l0_hat - r_norm) + b * (v_com.T @ r_hat))
@@ -381,7 +381,7 @@ class MDROM:
             r = np.linalg.norm(r_vec)
             rdot = -v_com.T @ r_hat
             theta = -np.arctan2(r_x, -r_z)
-            thetadot = (r_z * rdot_x - r_x * rdot_z) / r
+            thetadot = (r_z * rdot_x - r_x * rdot_z) / r**2  # TODO: isnt it divided by r^2, See my math to confirm... I think it is? Changed it
 
             # compute leg force
             l0_hat = x_sys[4][0]

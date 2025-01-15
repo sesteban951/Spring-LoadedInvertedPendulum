@@ -15,6 +15,7 @@ SYS_PARAMS:
     rdot_lim: 0.1           # max leg velocity [m/s]
     thetadot_lim: 0.1       # max angle velocity [rad/s]
     torque_ankle: True      # whether or not to enable the ankle torque
+    torque_ankle_lim: 15.0  # ankle torque limit, [Nm]
     torque_ankle_kp: 100.0  # ankle torque proportional gain
     torque_ankle_kd: 10.0   # ankle torque derivative gain
 
