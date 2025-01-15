@@ -20,7 +20,7 @@ Dynamics::Dynamics(YAML::Node config_file)
     params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
 }
 
-State_Vec Dynamics::dynamics(State_Vec x, Control_Vec u, Foot_Pos_Vec p_foot, Domain d)
+Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain d)
 {
     // access some system parameters
     double m = this->params.m;
@@ -29,17 +29,17 @@ State_Vec Dynamics::dynamics(State_Vec x, Control_Vec u, Foot_Pos_Vec p_foot, Do
     double b = this->params.b;
 
     // unpack the state vector
-    Eigen::Vector<double, 2> p_com;
-    Eigen::Vector<double, 2> v_com;
+    Vector_2d p_com;
+    Vector_2d v_com;
     p_com << x(0), x(1);
     v_com << x(2), x(3);
 
     // vectors to use in the calculations
-    Eigen::Vector<double, 2> a_com;
-    Eigen::Vector<double, 2> v_leg;
-    Eigen::Vector<double, 2> g_vec;
+    Vector_2d a_com;
+    Vector_2d v_leg;
+    Vector_2d g_vec;
     g_vec << 0, -g;
-    State_Vec xdot;
+    Vector_6d xdot;
 
     // Flight domain dynamics (F)
     if (d == Domain::FLIGHT) {
@@ -54,7 +54,7 @@ State_Vec Dynamics::dynamics(State_Vec x, Control_Vec u, Foot_Pos_Vec p_foot, Do
     // Ground domain dynamics (G)
     else if (d == Domain::GROUND) {
         // compute the leg state
-        Eigen::Vector<double, 2> r_vec, r_hat, rdot_vec, lambd;
+        Vector_2d r_vec, r_hat, rdot_vec, lambd;
         double r_norm, r_x, r_z, rdot_x, rdot_z, l0_command, tau_ankle;
 
         // compute the leg state
@@ -78,7 +78,7 @@ State_Vec Dynamics::dynamics(State_Vec x, Control_Vec u, Foot_Pos_Vec p_foot, Do
         lambd = -r_hat * (k * (l0_command - r_norm) - b * (-v_com.dot(r_hat)));
 
         // compute the equivalent force from ankle torque (force prependicular to the leg applied at COM)
-        Eigen::Vector<double, 2> f_com;
+        Vector_2d f_com;
         if (this->params.torque_ankle == true) {
             
             // actual angle state and command theta states
@@ -95,7 +95,7 @@ State_Vec Dynamics::dynamics(State_Vec x, Control_Vec u, Foot_Pos_Vec p_foot, Do
             tau_ankle = std::max(-this->params.torque_ankle_lim, std::min(this->params.torque_ankle_lim, tau_ankle));
 
             // compute the equivalent force from ankle torque
-            Eigen::Vector<double, 2> f_com, f_unit;
+            Vector_2d f_com, f_unit;
             double f_mag = tau_ankle / r_norm;
             f_unit << std::cos(theta), -std::sin(theta);
             f_com = f_mag * f_unit;

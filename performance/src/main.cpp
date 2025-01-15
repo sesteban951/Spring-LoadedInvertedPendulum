@@ -2,9 +2,9 @@
 #include <iostream>
 #include "Eigen/Dense"
 #include "yaml-cpp/yaml.h"
-# include <vector>
 
 // custom includes
+#include "../inc/types.h"
 #include "../inc/dynamics.h"
 #include "../inc/control.h"
 
@@ -18,6 +18,8 @@ int main()
 
     // create the controller object
     Controller controller(config_file);
+
+    
 
     return 0;
 }

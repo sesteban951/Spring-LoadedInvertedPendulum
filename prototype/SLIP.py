@@ -847,6 +847,7 @@ class PredictiveController:
         U_elite = U_list[:, :, 0:self.N_elite]
 
         # calculate the means and covariances of each control knot
+        # TODO: I think I'm computing this wrong, shouldn't I compute a covariance on the giatn vector trajectories?
         mu = np.zeros((2 * self.Nu, 1))
         cov = np.zeros((2 * self.Nu, 2 * self.Nu))
         for i in range(0, self.Nu):
@@ -911,8 +912,8 @@ if __name__ == "__main__":
     Qf_diags = 1 * Q_diags
     Q = np.diag(Q_diags)
     Qf = np.diag(Qf_diags)
-    l0_rate_penalty = 1.0
-    theta_rate_penalty = 1.0
+    l0_rate_penalty = 0.1
+    theta_rate_penalty = 0.1
     control_params = PredictiveControlParams(N=100, 
                                              dt=0.01, 
                                              K=500,
@@ -923,7 +924,7 @@ if __name__ == "__main__":
                                              l0_rate_penalty=l0_rate_penalty,
                                              theta_rate_penalty=theta_rate_penalty,
                                              N_elite=20,
-                                             CEM_iters=3)
+                                             CEM_iters=20)
 
     # create parametric distribution parameters
     mean_r = 0.0             # [m/s]
