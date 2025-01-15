@@ -17,6 +17,17 @@ Dynamics::Dynamics(YAML::Node config_file)
     params.torque_ankle = config_file["SYS_PARAMS"]["torque_ankle"].as<bool>();
     params.torque_ankle_kp = config_file["SYS_PARAMS"]["torque_ankle_kp"].as<double>();
     params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
-
 }
 
+Dynamics::dynamics(state_vec x, control_vec u, domain d)
+{
+    // access some system parameters
+    double m = params.m;
+    double g = params.g;
+    double k = params.k;
+    double b = params.b;
+
+    // unpack the state vector
+    Eigen::Vector<double, 2> p_com;
+    Eigen::Vector<double, 2> v_com;
+}

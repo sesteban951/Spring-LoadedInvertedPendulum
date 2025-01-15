@@ -16,7 +16,7 @@ int main()
     // create dynamics object
     Dynamics dynamics(config_file);
 
-    // // create the controller object
+    // create the controller object
     Controller controller(config_file);
 
     return 0;

@@ -23,6 +23,11 @@ struct SystemParams
     double torque_ankle_kd;           // derivative gain for ankle torque
 };
 
+// common typedefs
+typedef Eigen::Vector<double, 6> state_vec;
+typedef Eigen::Vector<double, 2> control_vec;
+typedef char domain;
+
 // class for system dynamics
 class Dynamics
 {
@@ -31,6 +36,12 @@ class Dynamics
         Dynamics(YAML::Node config_file);  
         ~Dynamics(){};
 
+        // system dynamics
+        Eigen::Vector<double, 6> dynamics(state_vec x, 
+                                          control_vec u, 
+                                          domain d);
+
+    private:
         // System parameters
         SystemParams params;
 };
