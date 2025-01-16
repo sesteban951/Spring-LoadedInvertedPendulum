@@ -1,5 +1,6 @@
 #include "../inc/dynamics.h"
 
+
 Dynamics::Dynamics(YAML::Node config_file)
 {
     // set the system parameters
@@ -19,6 +20,7 @@ Dynamics::Dynamics(YAML::Node config_file)
     params.torque_ankle_kp = config_file["SYS_PARAMS"]["torque_ankle_kp"].as<double>();
     params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
 }
+
 
 // Dynamics function, xdot = f(x, u, d)
 Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain d)
@@ -118,29 +120,9 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
     return xdot;
 }
 
-// RK3 integration function
-void Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
-                           Vector_6d x0, Vector_2d p0, Domain d0,
-                           Vector_2d_Traj U) 
-{
-    // integration parameters
-    double dt = T_x[1] - T_x[0];
-    int N = T_x.size();
-
-    // make solution containers
-    Vector_6d_Traj x_sys_t;
-    Vector_4d_Traj x_foot_t, x_leg_t;
-    Vector_2d_Traj u_t;
-    Domain_Traj domain_t;
-    x_sys_t.resize(N);
-    x_foot_t.resize(N);
-    x_leg_t.resize(N);
-    u_t.resize(N);
-    domain_t.resize(N);
-}
 
 // compute the leg state
-Vector_4d Dynamics::compute_leg_state(Vector_6d x, Vector_2d p_foot, Vector_2d u, Domain d)
+Vector_4d Dynamics::compute_leg_state(Vector_6d x_sys, Vector_2d p_foot, Vector_2d u, Domain d)
 {
     // leg state variable
     Vector_4d x_leg;
@@ -151,8 +133,8 @@ Vector_4d Dynamics::compute_leg_state(Vector_6d x, Vector_2d p_foot, Vector_2d u
     // in flight (single integrator dynamics)
     if (d == Domain::FLIGHT) {
         // leg positions are the integrated velocity commands
-        r = x(4);
-        theta = x(5);
+        r = x_sys(4);
+        theta = x_sys(5);
         rdot = u(0);
         thetadot = u(1);
 
@@ -164,8 +146,8 @@ Vector_4d Dynamics::compute_leg_state(Vector_6d x, Vector_2d p_foot, Vector_2d u
     else if (d == Domain::GROUND) {
         // unpack COM state
         Vector_2d p_com, v_com;
-        p_com << x(0), x(1);
-        v_com << x(2), x(3);
+        p_com << x_sys(0), x_sys(1);
+        v_com << x_sys(2), x_sys(3);
 
         // leg vectors
         Vector_2d r_vec, r_hat, rdot_vec;
@@ -197,3 +179,97 @@ Vector_4d Dynamics::compute_leg_state(Vector_6d x, Vector_2d p_foot, Vector_2d u
     return x_leg;
 }
 
+
+// compute foot state in world frame
+Vector_4d Dynamics::compute_foot_state(Vector_6d x_sys, Vector_4d x_leg, Vector_2d p_foot, Domain d)
+{
+    // foot state variable
+    Vector_4d x_foot;
+
+    // Flight (F), foot is in swing
+    if (d == Domain::FLIGHT) {
+        // com varaibles
+        double px_com, pz_com, vx_com, vz_com;
+        px_com = x_sys(0);
+        pz_com = x_sys(1);
+        vx_com = x_sys(2);
+        vz_com = x_sys(3);
+
+        // leg states
+        double r, theta, rdot, thetadot;
+        r = x_leg(0);
+        theta = x_leg(1);
+        rdot = x_leg(2);
+        thetadot = x_leg(3);
+
+        // compute the foot state via fwd kinematics
+        double px_foot, pz_foot, vx_foot, vz_foot;
+        px_foot = px_com - r * std::sin(theta);
+        pz_foot = pz_com - r * std::cos(theta);
+        vx_foot = vx_com - rdot * std::sin(theta) - r * thetadot * std::cos(theta);
+        vz_foot = vz_com - rdot * std::cos(theta) + r * thetadot * std::sin(theta);
+
+        // populate the foot state vector
+        x_foot << px_foot, pz_foot, vx_foot, vz_foot;
+    }
+
+    // Ground (G), foot is in stance
+    else if (d == Domain::GROUND) {
+        // foot state is the same as the foot position w/ zero velocity
+        x_foot << p_foot(0), p_foot(1), 0, 0;
+    }
+
+    else {
+        std::cout << "Invalid domain for computing foot state." << std::endl;
+    }
+
+    return x_foot;
+}
+
+
+// RK3 integration function
+void Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
+                           Vector_6d x0_sys, Vector_2d p0_foot, Domain d0,
+                           Vector_2d_Traj U) 
+{
+    // integration parameters
+    double dt = T_x[1] - T_x[0];
+    int N = T_x.size();
+
+    // make solution trajectory containers
+    Vector_6d_Traj x_sys_t;
+    Vector_4d_Traj x_leg_t, x_foot_t;
+    Vector_2d_Traj u_t;
+    Domain_Traj domain_t;
+    x_sys_t.resize(N);
+    x_foot_t.resize(N);
+    x_leg_t.resize(N);
+    u_t.resize(N);
+    domain_t.resize(N);
+
+    // initial conditions
+    Vector_4d x0_leg = this->compute_leg_state(x0_sys, p0_foot, U[0], d0);
+    Vector_4d x0_foot = this->compute_foot_state(x0_sys, x0_leg, p0_foot, d0);
+    x_sys_t[0] = x0_sys;
+    x_leg_t[0] = x0_leg;
+    x_foot_t[0] = x0_foot;
+    u_t[0] = U[0];
+    domain_t[0] = d0;
+
+    // current state variables
+    Vector_6d xk_sys = x0_sys;
+    Vector_4d xk_leg = x0_leg;
+    Vector_4d xk_foot = x0_foot;
+    Vector_2d p_foot = p0_foot;
+    Domain dk = d0;
+
+    // ****************************** RK3 integration ******************************
+    // viability variable
+    bool viability = true;
+
+    // start RK3 integration
+    for (int k = 1; k < N; k++) {
+        std::cout << "Integrating step: " << k << std::endl;
+    }
+
+}

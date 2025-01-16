@@ -31,6 +31,12 @@ class Dynamics
                                     Vector_2d u, 
                                     Domain d);
 
+        // compute the foot state
+        Vector_4d compute_foot_state(Vector_6d x, 
+                                     Vector_4d x_leg, 
+                                     Vector_2d p_foot, 
+                                     Domain d);
+
     // private:
         // System parameters
         SystemParams params;

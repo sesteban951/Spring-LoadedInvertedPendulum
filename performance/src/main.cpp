@@ -44,8 +44,27 @@ int main()
     // query the leg state
     Vector_4d x_leg = dynamics.compute_leg_state(x, p_foot, u, d);
 
+    // query the foot state
+    Vector_4d x_foot = dynamics.compute_foot_state(x, x_leg, p_foot, d);
+
     // print the results
+    std::cout << "xdot: " << xdot << std::endl;
     std::cout << "xleg: " << x_leg << std::endl;
+    std::cout << "xfoot: " << x_foot << std::endl;
+
+    // build a time vector
+    Vector_1d_Traj T_x, T_u;
+    Vector_2d_Traj U;
+    T_x.resize(controller.params.N);
+    T_u.resize(controller.params.Nu);
+    U.resize(controller.params.Nu);  
+
+    std::cout << "T_x: " << T_x.size() << std::endl;
+    std::cout << "T_u: " << T_u.size() << std::endl;
+    std::cout << "U: " << U.size() << std::endl;
+
+    // print the trajectories
+    dynamics.RK3_rollout(T_x, T_u, x, p_foot, d, U);
 
     return 0;
 }
