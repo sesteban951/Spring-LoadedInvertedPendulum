@@ -34,15 +34,13 @@ int main()
 
     // initial conditions
     x << 0,    // px_com
-         0.75, // pz_com
-         1,    // vx_com
-         1,    // vz_com
-         0,    // l0_command
-         0;    // theta_command
-    u << 0.1,    // l0dot_command
-         0.2;    // thetadot_command
-    p_foot << 0.1,  // px_foot
-              0.1;  // pz_foot
+         5.75, // pz_com
+         0,    // vx_com
+         0,    // vz_com
+         dynamics.params.l0,    // l0_command
+         0;                     // theta_command
+    p_foot << 0.0,  // px_foot
+              0.0;  // pz_foot
     d = Domain::FLIGHT;
 
     // build a time vector
@@ -56,14 +54,15 @@ int main()
         T_x[i] = i * controller.params.dt;
         T_u[i] = i * controller.params.dt;
     }
-    Vector_2d U_const;
-    U_const << 0.01, -1.0;
 
+    // build input trajectory
+    Vector_2d U_const;
+    U_const << 0.0, 0.0;
     for (int i = 0; i < controller.params.Nu; i++) {
         U[i] = U_const;
     }
 
-    // print the trajectories
+    // single rollout
     Solution sol;
     auto t0 = std::chrono::high_resolution_clock::now();
     sol = dynamics.RK3_rollout(T_x, T_u, x, p_foot, d, U);
@@ -82,9 +81,10 @@ int main()
     std::ofstream file;
 
     file.open(time_file);
-    for (int i = 0; i < sol.x_sys_t.size(); i++) {
+    for (int i = 0; i < T_x.size(); i++) {
         file << T_x[i] << std::endl;
     }
+    file.close();
 
     file.open(x_sys_file);
     for (int i = 0; i < sol.x_sys_t.size(); i++) {

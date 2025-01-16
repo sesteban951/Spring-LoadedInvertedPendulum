@@ -22,7 +22,7 @@ Dynamics::Dynamics(YAML::Node config_file)
 }
 
 
-// Dynamics function, xdot = f(x, u, d)
+// NonLinear Dynamics function, xdot = f(x, u, d)
 Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain d)
 {
     // access some system parameters

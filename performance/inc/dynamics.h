@@ -13,7 +13,7 @@ class Dynamics
         Dynamics(YAML::Node config_file);  
         ~Dynamics(){};
 
-        // System dynamics, xdot = f(x, u, d)
+        // NonLinear System dynamics, xdot = f(x, u, d)
         Vector_6d dynamics(Vector_6d x, 
                            Vector_2d u, 
                            Vector_2d p_foot,
