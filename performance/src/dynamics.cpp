@@ -117,6 +117,8 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
         std::cout << "Invalid domain for integration." << std::endl;
     }
 
+    std::cout << "xdot: " << xdot << std::endl;
+
     return xdot;
 }
 
@@ -228,19 +230,20 @@ Vector_4d Dynamics::compute_foot_state(Vector_6d x_sys, Vector_4d x_leg, Vector_
 
 
 // RK3 integration function
-void Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
-                           Vector_6d x0_sys, Vector_2d p0_foot, Domain d0,
-                           Vector_2d_Traj U) 
+Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
+                               Vector_6d x0_sys, Vector_2d p0_foot, Domain d0,
+                               Vector_2d_Traj U) 
 {
     // integration parameters
     double dt = T_x[1] - T_x[0];
     int N = T_x.size();
 
     // make solution trajectory containers
-    Vector_6d_Traj x_sys_t;
-    Vector_4d_Traj x_leg_t, x_foot_t;
-    Vector_2d_Traj u_t;
-    Domain_Traj domain_t;
+    Vector_6d_Traj x_sys_t;   // system state trajectory
+    Vector_4d_Traj x_leg_t;   // leg state trajectory
+    Vector_4d_Traj x_foot_t;  // foot state trajectory
+    Vector_2d_Traj u_t;       // interpolated control input trajectory
+    Domain_Traj domain_t;     // domain trajectory
     x_sys_t.resize(N);
     x_foot_t.resize(N);
     x_leg_t.resize(N);
@@ -261,15 +264,67 @@ void Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
     Vector_4d xk_leg = x0_leg;
     Vector_4d xk_foot = x0_foot;
     Vector_2d p_foot = p0_foot;
+    Vector_2d uk = U[0];
     Domain dk = d0;
 
     // ****************************** RK3 integration ******************************
-    // viability variable
+    // viability variable (for viability kernel)
     bool viability = true;
+
+    // intermediate times, inputs, and vector field values
+    double tk, t1, t2, t3;
+    Vector_2d u1, u2, u3;
+    Vector_6d f1, f2, f3;
 
     // start RK3 integration
     for (int k = 1; k < N; k++) {
-        std::cout << "Integrating step: " << k << std::endl;
+        // std::cout << "Integrating step: " << k << std::endl;
+
+        // interpolation times
+        tk = k * dt;
+        t1 = tk;
+        t2 = tk + 0.5 * dt;
+        t3 = tk + dt;
+
+        // interpolate the control input
+        u1 = uk; // TODO: finish this imterpolation implementation
+        u2 = uk;
+        u3 = uk;
+
+        std::cout << xk_sys << std::endl;
+
+        // vector fields for the RK3 integration
+        f1 = this->dynamics(xk_sys, 
+                            u1, p_foot, dk);
+        f2 = this->dynamics(xk_sys + 0.5 * dt * f1, 
+                            u2, p_foot, dk);
+        f3 = this->dynamics(xk_sys - dt * f1 + 2 * dt * f2,
+                            u3, p_foot, dk);
+
+        // TODO: implement switching surfaces
+        // TODO: implement viability kernel
+
+        // take the RK3 step
+        xk_sys = xk_sys + (dt / 6) * (f1 + 4 * f2 + f3);
+        xk_leg = this->compute_leg_state(xk_sys, p_foot, uk, dk);
+        xk_foot = this->compute_foot_state(xk_sys, xk_leg, p_foot, dk);
+
+        // store the states
+        x_sys_t[k] = xk_sys;
+        x_leg_t[k] = xk_leg;
+        x_foot_t[k] = xk_foot;
+        u_t[k] = uk;
+        domain_t[k] = dk;
     }
 
+    // pack the solution into the solution struct
+    Solution sol;
+    sol.x_sys_t = x_sys_t;
+    sol.x_leg_t = x_leg_t;
+    sol.x_foot_t = x_foot_t;
+    sol.u_t = u_t;
+    sol.domain_t = domain_t;
+    sol.viability = viability;
+
+    return sol;
 }

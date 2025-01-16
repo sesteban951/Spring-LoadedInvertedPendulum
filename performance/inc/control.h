@@ -1,6 +1,5 @@
 // standard includes
 #include <iostream>
-#include "Eigen/Dense"
 #include "yaml-cpp/yaml.h"
 
 // custom includes

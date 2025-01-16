@@ -1,9 +1,8 @@
 #pragma once
 
 // standard libraries
-#include<Eigen/Dense>
-#include<vector>
-
+#include <Eigen/Dense>
+#include <vector>
 
 // ***********************************************************************************
 // ENUMS
@@ -79,3 +78,13 @@ struct ControlParams
     int CEM_iters;       // number of CEM iterations
 };
 
+// dynamics solution struct
+struct Solution
+{
+    Vector_6d_Traj x_sys_t;  // system state trajectory
+    Vector_4d_Traj x_leg_t;  // leg state trajectory
+    Vector_4d_Traj x_foot_t; // foot state trajectory
+    Vector_2d_Traj u_t;      // interpolated control input trajectory
+    Domain_Traj domain_t;    // domain trajectory
+    bool viability;          // viability of the trajectory
+};

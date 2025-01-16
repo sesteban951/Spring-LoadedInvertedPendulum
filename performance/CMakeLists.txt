@@ -9,6 +9,10 @@ set(CMAKE_CXX_STANDARD 17)  # Need c++ 17 for inline variables
 set(CMAKE_CXX_STANDARD_REQUIRED True)
 set(CMAKE_CXX_FLAGS "-O3 -pthread")
 
+# optimize for speed
+# set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -O3 -march=native -mtune=native -ffast-math -funroll-loops -fomit-frame-pointer -pthread")
+# set(CMAKE_CXX_FLAGS_RELEASE "-DNDEBUG")  # Disable debugging in release builds
+
 # where to look for packages and libraries
 SET(yaml-cpp_DIR /home/sergio/repos/yaml-cpp_install/lib/cmake/yaml-cpp/)
 

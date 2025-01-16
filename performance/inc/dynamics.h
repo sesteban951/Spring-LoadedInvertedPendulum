@@ -1,6 +1,5 @@
 // standard includes
 #include <iostream>
-#include "Eigen/Dense"
 #include "yaml-cpp/yaml.h"
 
 // custom includes
@@ -20,11 +19,6 @@ class Dynamics
                            Vector_2d p_foot,
                            Domain d);
 
-        // RK3 integration function
-        void RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
-                         Vector_6d x0, Vector_2d p0, Domain d0,
-                         Vector_2d_Traj U);
-
         // compute the leg state
         Vector_4d compute_leg_state(Vector_6d x, 
                                     Vector_2d p_foot, 
@@ -36,6 +30,12 @@ class Dynamics
                                      Vector_4d x_leg, 
                                      Vector_2d p_foot, 
                                      Domain d);
+        
+        // RK3 integration function
+        Solution RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
+                             Vector_6d x0, Vector_2d p0, Domain d0,
+                             Vector_2d_Traj U);
+
 
     // private:
         // System parameters
