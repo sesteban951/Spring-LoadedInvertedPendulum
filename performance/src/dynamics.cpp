@@ -132,6 +132,7 @@ Vector_4d Dynamics::compute_leg_state(Vector_6d x_sys, Vector_2d p_foot, Vector_
 
     // in flight (single integrator dynamics)
     if (d == Domain::FLIGHT) {
+       
         // leg positions are the integrated velocity commands
         r = x_sys(4);
         theta = x_sys(5);
@@ -144,6 +145,7 @@ Vector_4d Dynamics::compute_leg_state(Vector_6d x_sys, Vector_2d p_foot, Vector_
 
     // on ground (leg state goverened by the COM dynamics)
     else if (d == Domain::GROUND) {
+       
         // unpack COM state
         Vector_2d p_com, v_com;
         p_com << x_sys(0), x_sys(1);
@@ -224,6 +226,94 @@ Vector_4d Dynamics::compute_foot_state(Vector_6d x_sys, Vector_4d x_leg, Vector_
     }
 
     return x_foot;
+}
+
+
+// Touch-Down (TD) Switching Surface -- cheks individual legs
+bool Dynamics::S_TD(Vector_4d x_foot) {
+   
+    // unpack the state variables
+    double pz_foot, vz_foot;
+    pz_foot = x_foot(1);
+    vz_foot = x_foot(3);
+
+    // check the switching surface conditions
+    bool gnd_pos, neg_vel, touchdown;
+    gnd_pos = pz_foot <= 0.0;     // foot penetrated the ground
+    neg_vel = vz_foot <= 0.0;     // foot is moving downward
+    touchdown = gnd_pos && neg_vel; // if true, the foot touched down 
+
+    return touchdown;
+}
+
+// Take-Off (TO) Switching Surface -- checks individual legs
+bool Dynamics::S_TO(Vector_6d x_sys, Vector_4d x_leg) {
+    
+    // unpack the state variables
+    double r, rdot, l0_command;
+    r = x_leg(0);
+    rdot = x_leg(2);
+    l0_command = x_sys(4);
+
+    // check the switching surface condition (zero force in leg)
+    bool nom_length, pos_vel, takeoff;
+    nom_length = r >= l0_command;  // leg is at or above the commanded length
+    pos_vel = rdot >= 0.0;         // leg is moving upward
+    takeoff = nom_length && pos_vel; // if true, the leg took off
+
+    return takeoff;
+}
+
+// apply the reset map (TODO: should probably use pointers)
+void Dynamics::reset_map(Vector_6d& x_sys, Vector_4d& x_leg, Vector_4d& x_foot, Vector_2d u, Domain d_prev, Domain d_post)
+{
+    // states to apply reset map to
+    Vector_6d x_sys_post;
+    Vector_4d x_leg_post;
+    Vector_4d x_foot_post;
+    Vector_2d p_foot_post;
+
+    // Flight to Ground reset map
+    if (d_prev == Domain::FLIGHT && d_post == Domain::GROUND) {
+        
+        // update the foot location (based on heuristic)
+        p_foot_post << x_foot(0), 0.0;
+
+        // update the leg state
+        x_leg_post = this->compute_leg_state(x_sys, p_foot_post, Vector_2d::Zero(), d_post);
+
+        // update the system state
+        x_sys_post = x_sys;
+        x_sys_post(4) = x_leg_post(0); // reset leg length command to the actual leg length at TD
+        x_sys_post(5) = x_leg_post(1); // reset leg angle command to the actual leg angle at TD
+
+        // update the foot state
+        x_foot_post = this->compute_foot_state(x_sys_post, x_leg_post, p_foot_post, d_post);
+    }
+
+    // Ground to Flight reset amp
+    else if (d_prev == Domain::GROUND && d_post == Domain::FLIGHT) {
+        
+        // update the foot location (based on heuristic)
+        p_foot_post << x_foot(0), x_foot(1);  // NOTE: deviates from python implementation
+
+        // update the leg state
+        x_leg_post(2) = u(0); // leg velocity is the commanded velocity
+        x_leg_post(3) = u(1); // leg angle velocity is the commanded velocity
+
+        // update the system state
+        x_sys_post = x_sys;
+        x_sys_post(4) = x_leg_post(0); // reset leg length command to the actual leg length at TD
+        x_sys_post(5) = x_leg_post(1); // reset leg angle command to the actual leg angle at TD
+
+        // update the foot state
+        x_foot_post = this->compute_foot_state(x_sys_post, x_leg_post, p_foot_post, d_post);
+    }
+
+    // update the states
+    x_sys = x_sys_post;
+    x_leg = x_leg_post;
+    x_foot = x_foot_post;
 }
 
 

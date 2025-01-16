@@ -71,6 +71,7 @@ int main()
     std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
 
     // where to save each trajectory
+    std::string time_file = "../data/time.csv";
     std::string x_sys_file = "../data/state_sys.csv";
     std::string x_leg_file = "../data/state_leg.csv";
     std::string x_foot_file = "../data/state_foot.csv";
@@ -79,6 +80,12 @@ int main()
 
     // save the solution to a file
     std::ofstream file;
+
+    file.open(time_file);
+    for (int i = 0; i < sol.x_sys_t.size(); i++) {
+        file << T_x[i] << std::endl;
+    }
+
     file.open(x_sys_file);
     for (int i = 0; i < sol.x_sys_t.size(); i++) {
         file << sol.x_sys_t[i].transpose() << std::endl;
