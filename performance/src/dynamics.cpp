@@ -20,6 +20,7 @@ Dynamics::Dynamics(YAML::Node config_file)
     params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
 }
 
+// Dynamics function, xdot = f(x, u, d)
 Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain d)
 {
     // access some system parameters
@@ -34,7 +35,7 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
     v_com << x(2), x(3);
 
     // vectors to use in the calculations
-    Vector_2d a_com, v_leg, g_vec;
+    Vector_2d a_com, v_leg, g_vec, f_com;
     Vector_6d xdot;
     g_vec << 0, -g;
 
@@ -85,10 +86,10 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
             double tau_ankle = kp * (theta_command - theta) + kd * (thetadot_command - thetadot);
 
             // saturate the ankle torque
-            double tau_ankle = std::max(-this->params.torque_ankle_lim, std::min(this->params.torque_ankle_lim, tau_ankle));
+            tau_ankle = std::max(-this->params.torque_ankle_lim, std::min(this->params.torque_ankle_lim, tau_ankle));
 
             // compute the equivalent force from ankle torque
-            Vector_2d f_com, f_unit;
+            Vector_2d f_unit;
             double f_mag = tau_ankle / r_norm;
             f_unit << std::cos(theta), -std::sin(theta);
             f_com = f_mag * f_unit;
@@ -104,14 +105,95 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
         a_com = (1/m) * lambd_vec + (1/m) * f_com + g_vec;
 
         // compute the leg dynamics
-        v_leg << u(0), thetadot; // TODO: shouldn't I keep using the command signal instead?
+        v_leg << u(0), u(1);
 
         // stack the acceleration and velocity vectors
         xdot << v_com, a_com, v_leg;
     }
+
     else {
         std::cout << "Invalid domain for integration." << std::endl;
     }
 
     return xdot;
 }
+
+// RK3 integration function
+void Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 
+                           Vector_6d x0, Vector_2d p0, Domain d0,
+                           Vector_2d_Traj U) 
+{
+    // integration parameters
+    double dt = T_x[1] - T_x[0];
+    int N = T_x.size();
+
+    // make solution containers
+    Vector_6d_Traj x_sys_t;
+    Vector_4d_Traj x_foot_t, x_leg_t;
+    Vector_2d_Traj u_t;
+    Domain_Traj domain_t;
+    x_sys_t.resize(N);
+    x_foot_t.resize(N);
+    x_leg_t.resize(N);
+    u_t.resize(N);
+    domain_t.resize(N);
+}
+
+// compute the leg state
+Vector_4d Dynamics::compute_leg_state(Vector_6d x, Vector_2d p_foot, Vector_2d u, Domain d)
+{
+    // leg state variable
+    Vector_4d x_leg;
+
+    // indivudual states
+    double r, theta, rdot, thetadot;
+
+    // in flight (single integrator dynamics)
+    if (d == Domain::FLIGHT) {
+        // leg positions are the integrated velocity commands
+        r = x(4);
+        theta = x(5);
+        rdot = u(0);
+        thetadot = u(1);
+
+        // populate the polar state vector
+        x_leg << r, theta, rdot, thetadot;
+    }
+
+    // on ground (leg state goverened by the COM dynamics)
+    else if (d == Domain::GROUND) {
+        // unpack COM state
+        Vector_2d p_com, v_com;
+        p_com << x(0), x(1);
+        v_com << x(2), x(3);
+
+        // leg vectors
+        Vector_2d r_vec, r_hat, rdot_vec;
+        double r_norm, r_x, r_z, rdot_x, rdot_z;
+        r_vec = p_foot - p_com;
+        r_norm = r_vec.norm();
+        r_hat = r_vec / r_norm;
+        rdot_vec = -v_com;
+
+        r_x = r_vec(0);
+        r_z = r_vec(1);
+        rdot_x = rdot_vec(0);
+        rdot_z = rdot_vec(1);
+
+        // compute the polar leg state 
+        r = r_norm;
+        rdot = -v_com.dot(r_hat);
+        theta = -std::atan2(r_x, -r_z);
+        thetadot = (r_z * rdot_x - r_x * rdot_z) / (r * r);
+
+        // populate the polar state vector
+        x_leg << r, theta, rdot, thetadot;
+    }
+
+    else {
+        std::cout << "Invalid domain for computing leg state." << std::endl;
+    }
+
+    return x_leg;
+}
+

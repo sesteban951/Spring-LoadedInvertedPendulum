@@ -1,7 +1,15 @@
 #pragma once
 
+// standard libraries
 #include<Eigen/Dense>
 #include<vector>
+
+
+// ***********************************************************************************
+// ENUMS
+// ***********************************************************************************
+
+enum class Domain {FLIGHT, GROUND};
 
 // ***********************************************************************************
 // ARRAYS
@@ -17,11 +25,20 @@ using Vector_4d = Eigen::Vector<double, 4>;
 using Vector_6d = Eigen::Vector<double, 6>;
 using Vector_8d = Eigen::Vector<double, 8>;
 
-// ***********************************************************************************
-// ENUMS
-// ***********************************************************************************
+using Matrix_2d = Eigen::Matrix<double, 2, 2>;
+using Matrix_8d = Eigen::Matrix<double, 8, 8>;
 
-enum class Domain {FLIGHT, GROUND};
+// Time Series Types
+using Vector_1d_Traj = std::vector<double>;
+using Vector_2d_Traj = std::vector<Vector_2d>;
+using Vector_4d_Traj = std::vector<Vector_4d>;
+using Vector_6d_Traj = std::vector<Vector_6d>;
+using Vector_8d_Traj = std::vector<Vector_8d>;
+
+using Vector_d_Traj = std::vector<Vector_d>;
+using Matrix_d_Traj = std::vector<Matrix_d>;
+
+using Domain_Traj = std::vector<Domain>;
 
 // ***********************************************************************************
 // STRUCTS
