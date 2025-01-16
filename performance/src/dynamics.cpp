@@ -117,8 +117,6 @@ Vector_6d Dynamics::dynamics(Vector_6d x, Vector_2d u, Vector_2d p_foot, Domain 
         std::cout << "Invalid domain for integration." << std::endl;
     }
 
-    std::cout << "xdot: " << xdot << std::endl;
-
     return xdot;
 }
 
@@ -290,8 +288,6 @@ Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
         u1 = uk; // TODO: finish this imterpolation implementation
         u2 = uk;
         u3 = uk;
-
-        std::cout << xk_sys << std::endl;
 
         // vector fields for the RK3 integration
         f1 = this->dynamics(xk_sys, 
