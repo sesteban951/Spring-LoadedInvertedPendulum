@@ -64,17 +64,77 @@ void Controller::initialize_distribution(YAML::Node config_file)
     this->dist.seed = config_file["DIST_PARAMS"]["seed"].as<int>();
     this->dist.seed_enabled = config_file["DIST_PARAMS"]["seed_enabled"].as<bool>();
 
-    // TODO: set the random number generator and seed
+    // create random device
+    std::random_device rand_device;
+
+    // use the random device to seed Mersenne Twister generator
+    std::mt19937 rand_generator(rand_device());
+
+    // set the seed if enabled
+    if (this->dist.seed_enabled) {
+        rand_generator.seed(this->dist.seed);
+    }
+
+    // Create a normal distribution
+    std::normal_distribution<double> normal_dist(0.0, 1.0);
+    
+    // set the random number generator and normal distribution
+    this->rand_generator = rand_generator;
+    this->normal_dist = normal_dist;
 }
 
 // sample input trajectories
-// Vector_2d_Traj_Bundle Controller::sample_input_trajectory(int K)
-void Controller::sample_input_trajectory(int K)
+Vector_d_Traj Controller::sample_input_trajectory(int K)
 {
     // initialize the input trajectory bundle
-    Vector_2d_Traj_Bundle U_bundle;
+    Vector_d_Traj_Bundle U_bundle;
     U_bundle.resize(K);
 
-    
+    std::cout << "1" << std::endl;
 
+    // sample the input trajectories
+    Vector_d mean = this->dist.mean;
+    Matrix_d Sigma = this->dist.cov;
+
+    std::cout << "mean size: " << mean.size() << std::endl;
+    std::cout << "Sigma size: " << Sigma.rows() << "x" << Sigma.cols() << std::endl;
+
+    // perform cholesky decomposition 
+    Eigen::LLT<Matrix_d> llt(Sigma);  
+    Matrix_d L = llt.matrixL();  
+
+    std::cout << "2" << std::endl;
+    std::cout << "L size: " << L.rows() << "x" << L.cols() << std::endl;
+
+    // Generate a standard normal vector
+    Vector_d Z = Vector_d::Zero(mean.size());
+    Z.resize(mean.size());
+
+    for (int i = 0; i < mean.size(); i++) {
+        Z(i) = this->normal_dist(this->rand_generator);
+    }
+
+    std::cout << "Z: " << Z.size() << std::endl;
+    std::cout << "3" << std::endl;
+
+    // Generate a sample from the distribution
+    Vector_d Ut;
+    Ut.resize(mean.size());
+
+    std::cout << "Ut: " << Ut.size() << std::endl;
+
+    Ut = mean + L * Z;
+    Vector_d_Traj Ut_Traj;
+    Ut_Traj.resize(this->params.Nu);
+    for (int i = 0; i < this->params.Nu; i++) {
+        Ut_Traj[i] = Ut;
+    }
+
+    std::cout << "4" << std::endl;
+
+    for (int i = 0; i < K; i++) {
+        std::cout << "Ut_Traj: " << Ut_Traj[i].transpose() << std::endl;
+    }
+
+    return Ut_Traj;
 }

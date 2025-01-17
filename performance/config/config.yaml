@@ -46,5 +46,5 @@ DIST_PARAMS:
     sigma: [0.1, 0.1]           # initial standard deviations
     min_varaince: [0.05, 0.05]  # minimum variance of the state distribution
     diag_cov: False             # strictly enforce diagonal covariance matrix
-    seed: 0                     # random seed
     seed_enabled: False         # enable random seed
+    seed: 0                     # random seed

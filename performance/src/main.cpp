@@ -69,6 +69,8 @@ int main()
     auto t1 = std::chrono::high_resolution_clock::now();
     std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
 
+    Vector_d_Traj U_bundle = controller.sample_input_trajectory(3);
+
     // where to save each trajectory
     std::string time_file = "../data/time.csv";
     std::string x_sys_file = "../data/state_sys.csv";

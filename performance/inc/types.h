@@ -28,6 +28,7 @@ using Matrix_2d = Eigen::Matrix<double, 2, 2>;
 using Matrix_8d = Eigen::Matrix<double, 8, 8>;
 
 // Time Series Types
+using Vector_1i_Traj = std::vector<int>;
 using Vector_1d_Traj = std::vector<double>;
 using Vector_2d_Traj = std::vector<Vector_2d>;
 using Vector_4d_Traj = std::vector<Vector_4d>;
@@ -42,6 +43,8 @@ using Domain_Traj = std::vector<Domain>;
 // Bundle of Trajectories
 using Vector_2d_Traj_Bundle = std::vector<Vector_2d_Traj>;
 using Vector_8d_Traj_Bundle = std::vector<Vector_8d_Traj>;
+
+using Vector_d_Traj_Bundle = std::vector<Vector_d_Traj>;
 
 // ***********************************************************************************
 // STRUCTS
