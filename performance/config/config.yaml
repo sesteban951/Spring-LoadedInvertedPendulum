@@ -6,7 +6,7 @@ SYS_PARAMS:
     m: 35.0                 # COM mass,[kg] 
     g: 9.81                 # gravity, [m/s^2] 
     k: 7500.0               # spring stiffness, [N/m]
-    b: 75.0                 # damping coeff, [Ns/m]
+    b: 0.0                 # damping coeff, [Ns/m]
     l0: 0.65                # nominal rest length, [m]
     r_min: 0.4              # min leg length, [m]
     r_max: 0.8              # max leg length, [m]
@@ -18,21 +18,21 @@ SYS_PARAMS:
     torque_ankle_lim: 10.0  # ankle torque limit, [Nm]
     torque_ankle_kp: 125.0  # ankle torque proportional gain
     torque_ankle_kd: 10.0   # ankle torque derivative gain
+    interp: 'L'             # control interpolation method
 
 ####################################################################
 # Controller Parameters
 ####################################################################
 
 CTRL_PARAMS:
-    N: 100                           # number of time steps
-    dt: 0.02                        # time step, [s]
-    K: 750                         # stiffness, [N/m]
+    N: 100                          # number of time steps
+    dt: 0.01                        # time step, [s]
+    K: 750                          # number of rollouts
     Nu: 25                          # number of control points
-    interp: 'L'                     # interpolation method
-    Q_diags: [0.0, 5.0, 2.0, 0.05,
-              5.0, 5.0, 0.1, 1.0]   # diagonal elements of the cost matrix
-    Qf_diags: [0.0, 5.0, 2.0, 0.05,
-               5.0, 5.0, 0.1, 1.0]  # diagonal elements of the cost matrix
+    Q_diags:  [0.0, 5.0, 2.0, 0.05, # diagonal elements of the cost matrix
+               5.0, 5.0, 0.1, 1.0]   
+    Qf_diags: [0.0, 5.0, 2.0, 0.05, # diagonal elements of the terminal cost matrix
+               5.0, 5.0, 0.1, 1.0]  
     R_diags: [0.1, 0.1]             # diagonal elements of the control cost matrix
-    N_elite: 100                     # number of elite samples
-    CEM_iters: 20                    # number of CEM iterations
+    N_elite: 100                    # number of elite samples
+    CEM_iters: 20                   # number of CEM iterations

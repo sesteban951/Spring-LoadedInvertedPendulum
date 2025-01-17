@@ -19,6 +19,7 @@ Dynamics::Dynamics(YAML::Node config_file)
     params.torque_ankle_lim = config_file["SYS_PARAMS"]["torque_ankle_lim"].as<double>();
     params.torque_ankle_kp = config_file["SYS_PARAMS"]["torque_ankle_kp"].as<double>();
     params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
+    params.interp = config_file["SYS_PARAMS"]["interp"].as<char>();
 }
 
 
@@ -218,7 +219,7 @@ Vector_4d Dynamics::compute_foot_state(Vector_6d x_sys, Vector_4d x_leg, Vector_
     // Ground (G), foot is in stance
     else if (d == Domain::GROUND) {
         // foot state is the same as the foot position w/ zero velocity
-        x_foot << p_foot(0), p_foot(1), 0, 0;
+        x_foot << p_foot(0), p_foot(1), 0.0, 0.0;
     }
 
     else {
@@ -264,7 +265,40 @@ bool Dynamics::S_TO(Vector_6d x_sys, Vector_4d x_leg) {
     return takeoff;
 }
 
-// apply the reset map (TODO: should probably use pointers)
+
+// Check is a switching event occurred
+Domain Dynamics::check_switching_event(Vector_6d x_sys, Vector_4d x_leg, Vector_4d x_foot, Domain d_current)
+{
+    // return the current domain after checking the switching surfaces
+    Domain d_next;
+
+    // In Flight (F)
+    if (d_current == Domain::FLIGHT) {
+        // check for a touchdown event
+        bool touchdown = this->S_TD(x_foot);
+
+        // if touchdown, switch to ground domain
+        d_next = touchdown ? Domain::GROUND : Domain::FLIGHT;
+    }
+
+    // In Ground (G)
+    else if (d_current == Domain::GROUND) {
+        // check for a takeoff event
+        bool takeoff = this->S_TO(x_sys, x_leg);
+
+        // if takeoff, switch to flight domain
+        d_next = takeoff ? Domain::FLIGHT : Domain::GROUND;
+    }
+
+    else {
+        std::cout << "Invalid domain for checking switching event." << std::endl;
+    }
+
+    return d_next;
+}
+
+
+// apply the reset map
 void Dynamics::reset_map(Vector_6d& x_sys, Vector_4d& x_leg, Vector_4d& x_foot, Vector_2d u, Domain d_prev, Domain d_post)
 {
     // states to apply reset map to
@@ -280,7 +314,7 @@ void Dynamics::reset_map(Vector_6d& x_sys, Vector_4d& x_leg, Vector_4d& x_foot, 
         p_foot_post << x_foot(0), 0.0;
 
         // update the leg state
-        x_leg_post = this->compute_leg_state(x_sys, p_foot_post, Vector_2d::Zero(), d_post);
+        x_leg_post = this->compute_leg_state(x_sys, p_foot_post, u, d_post);
 
         // update the system state
         x_sys_post = x_sys;
@@ -294,10 +328,11 @@ void Dynamics::reset_map(Vector_6d& x_sys, Vector_4d& x_leg, Vector_4d& x_foot, 
     // Ground to Flight reset amp
     else if (d_prev == Domain::GROUND && d_post == Domain::FLIGHT) {
         
-        // update the foot location (based on heuristic)
+        // update the foot location
         p_foot_post << x_foot(0), x_foot(1);  // NOTE: deviates from python implementation
 
         // update the leg state
+        x_leg_post = x_leg;
         x_leg_post(2) = u(0); // leg velocity is the commanded velocity
         x_leg_post(3) = u(1); // leg angle velocity is the commanded velocity
 
@@ -307,13 +342,62 @@ void Dynamics::reset_map(Vector_6d& x_sys, Vector_4d& x_leg, Vector_4d& x_foot, 
         x_sys_post(5) = x_leg_post(1); // reset leg angle command to the actual leg angle at TD
 
         // update the foot state
-        x_foot_post = this->compute_foot_state(x_sys_post, x_leg_post, p_foot_post, d_post);
+        x_foot_post = this->compute_foot_state(x_sys, x_leg, p_foot_post, d_post);
     }
 
     // update the states
     x_sys = x_sys_post;
     x_leg = x_leg_post;
     x_foot = x_foot_post;
+}
+
+
+// interpolate an input signal
+Vector_2d Dynamics::interpolate_control_input(double t, Vector_1d_Traj T_u, Vector_2d_Traj U)
+{
+    // interpolated control input
+    Vector_2d u;
+    u.setZero();
+
+    // find the first element in the time vector that is greater than the current time
+    auto it = std::upper_bound(T_u.begin(), T_u.end(), t); 
+    int idx = std::distance(T_u.begin(), it) - 1;  // return -1 if before the first element, 
+                                                   // return N-1 if after the last element
+    
+    // Zero order hold (Z)
+    if (this->params.interp == 'Z') {
+        // constant control input
+        u = U[idx];
+    }
+
+    // Linear interpolation (L)
+    else if (this-> params.interp == 'L') {
+        
+        // beyond the last element
+        if (idx == T_u.size() - 1) {
+            u = U[idx];
+        }
+        // before the last element
+        else if (idx == -1) {
+            u = U[0];
+        }
+        // within an time interval
+        else {
+            // knot ends
+            double t0 = T_u[idx];
+            double tf = T_u[idx+1];
+            Vector_2d u0 = U[idx];
+            Vector_2d uf = U[idx+1];
+
+            // linear interpolation
+            u = u0 + (uf - u0) * (t - t0) / (tf - t0);
+        }
+    }
+    else {
+        std::cout << "Invalid interpolation method." << std::endl;
+    }
+
+    return u;
 }
 
 
@@ -354,6 +438,7 @@ Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
     Vector_2d p_foot = p0_foot;
     Vector_2d uk = U[0];
     Domain dk = d0;
+    Domain dk_next;
 
     // ****************************** RK3 integration ******************************
     // viability variable (for viability kernel)
@@ -375,9 +460,9 @@ Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
         t3 = tk + dt;
 
         // interpolate the control input
-        u1 = uk; // TODO: finish this imterpolation implementation
-        u2 = uk;
-        u3 = uk;
+        u1 = this->interpolate_control_input(t1, T_u, U);
+        u2 = this->interpolate_control_input(t2, T_u, U);
+        u3 = this->interpolate_control_input(t3, T_u, U);
 
         // vector fields for the RK3 integration
         f1 = this->dynamics(xk_sys, 
@@ -387,13 +472,29 @@ Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
         f3 = this->dynamics(xk_sys - dt * f1 + 2 * dt * f2,
                             u3, p_foot, dk);
 
-        // TODO: implement switching surfaces
-        // TODO: implement viability kernel
-
         // take the RK3 step
         xk_sys = xk_sys + (dt / 6) * (f1 + 4 * f2 + f3);
         xk_leg = this->compute_leg_state(xk_sys, p_foot, uk, dk);
         xk_foot = this->compute_foot_state(xk_sys, xk_leg, p_foot, dk);
+
+        // check for switching events
+        dk_next = this->check_switching_event(xk_sys, xk_leg, xk_foot, dk);
+
+        // if there was a switching event, apply the reset map
+        if (dk_next != dk) {
+
+            // TODO: implement viability kernel
+
+            // update all the states
+            this->reset_map(xk_sys, xk_leg, xk_foot, u3, dk, dk_next);
+
+            // update the foot location
+            p_foot(0) = xk_foot(0);
+            p_foot(1) = xk_foot(1);
+
+            // update the domain
+            dk = dk_next;
+        }
 
         // store the states
         x_sys_t[k] = xk_sys;

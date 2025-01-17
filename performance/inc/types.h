@@ -61,6 +61,7 @@ struct SystemParams
     double torque_ankle_lim;  // enable ankle torque 
     double torque_ankle_kp;   // proportional gain for ankle torque
     double torque_ankle_kd;   // derivative gain for ankle torque
+    char interp;              // control interpolation type
 };
 
 // struct to hold control parameters
@@ -70,7 +71,6 @@ struct ControlParams
     double dt;           // time step [sec]
     int K;               // number of parallel 
     int Nu;              // number of control points
-    char interp;         // interpolation method
     Vector_8d Q_diags;   // diagonal elements of Q matrix
     Vector_8d Qf_diags;  // diagonal elements of Qf matrix
     Vector_2d R_diags;   // diagonal elements of R matrix

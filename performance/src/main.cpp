@@ -33,33 +33,34 @@ int main()
     Domain d;
 
     // initial conditions
-    x << 0,    // px_com
-         5.75, // pz_com
-         0,    // vx_com
-         0,    // vz_com
+    x << 0.0,    // px_com
+         0.75, // pz_com
+         0.5,    // vx_com
+         0.5,    // vz_com
          dynamics.params.l0,    // l0_command
-         0;                     // theta_command
+         0.0;                   // theta_command
     p_foot << 0.0,  // px_foot
               0.0;  // pz_foot
     d = Domain::FLIGHT;
 
     // build a time vector
-    Vector_1d_Traj T_x, T_u;
-    Vector_2d_Traj U;
+    Vector_1d_Traj T_x;
     T_x.resize(controller.params.N);
-    T_u.resize(controller.params.N);
-    U.resize(controller.params.Nu);
-
     for (int i = 0; i < controller.params.N; i++) {
         T_x[i] = i * controller.params.dt;
-        T_u[i] = i * controller.params.dt;
     }
 
     // build input trajectory
+    Vector_1d_Traj T_u;
+    Vector_2d_Traj U;
     Vector_2d U_const;
-    U_const << 0.0, 0.0;
+    T_u.resize(controller.params.Nu);
+    U.resize(controller.params.Nu);
+    U_const << 0.0, -0.5;
     for (int i = 0; i < controller.params.Nu; i++) {
+        T_u[i] = i * controller.params.dt;
         U[i] = U_const;
+        // std::cout << i << ": " << (U_const * i).transpose() << std::endl;
     }
 
     // single rollout

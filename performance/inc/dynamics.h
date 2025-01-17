@@ -35,6 +35,12 @@ class Dynamics
         bool S_TD(Vector_4d x_foot);                 // Touch-Down (TD) Switching Surface
         bool S_TO(Vector_6d x_sys, Vector_4d x_leg); // Take-Off (TO) Switching Surface
 
+        // event detection 
+        Domain check_switching_event(Vector_6d x_sys, 
+                                     Vector_4d x_leg, 
+                                     Vector_4d x_foot, 
+                                     Domain d);
+
         // reset map
         void reset_map(Vector_6d& x_sys, 
                        Vector_4d& x_leg, 
@@ -42,6 +48,11 @@ class Dynamics
                        Vector_2d u, 
                        Domain d_prev, 
                        Domain d_post);
+
+        // interpolate the control input
+        Vector_2d interpolate_control_input(double t, 
+                                            Vector_1d_Traj T_u, 
+                                            Vector_2d_Traj U);
         
         // RK3 integration function, returns solutionof dynamics
         Solution RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u, 

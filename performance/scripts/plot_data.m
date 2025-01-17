@@ -14,8 +14,8 @@ d = load('../data/domain.csv');
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % segment the time
-% t_interval = [t(1) t(end)];
-t_interval = [0 1.0];
+t_interval = [t(1) t(end)];
+% t_interval = [0 1.0];
 
 % plotting / animation
 animate = 1;
@@ -199,8 +199,8 @@ if animate == 1
         while true
 
             % get COM position 
-            px = p_com(ind,1)
-            pz = p_com(ind,2)
+            px = p_com(ind,1);
+            pz = p_com(ind,2);
 
             % draw the legs
             px_foot = p_foot(ind,1);
@@ -248,7 +248,7 @@ if animate == 1
             end
         end
 
-        pause(0.25);
+        % pause(0.25);
 
         % clean the plot if still replaying
         if i < replays

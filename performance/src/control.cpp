@@ -7,7 +7,6 @@ Controller::Controller(YAML::Node config_file)
     params.dt = config_file["CTRL_PARAMS"]["dt"].as<double>();
     params.K = config_file["CTRL_PARAMS"]["K"].as<int>();
     params.Nu = config_file["CTRL_PARAMS"]["Nu"].as<int>();
-    params.interp = config_file["CTRL_PARAMS"]["interp"].as<char>();
     std::vector<double> Q_diags_temp = config_file["CTRL_PARAMS"]["Q_diags"].as<std::vector<double>>();
     std::vector<double> Qf_diags_temp = config_file["CTRL_PARAMS"]["Qf_diags"].as<std::vector<double>>();
     std::vector<double> R_diags_temp = config_file["CTRL_PARAMS"]["R_diags"].as<std::vector<double>>();
