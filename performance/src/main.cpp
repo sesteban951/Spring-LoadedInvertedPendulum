@@ -2,7 +2,6 @@
 #include <iostream>
 #include <chrono>
 #include <fstream>
-#include <sstream>
 
 // package includes
 #include "Eigen/Dense"
@@ -15,7 +14,6 @@
 
 int main()
 {
-
     // load parameters from yaml file
     std::string config_file_path = "../config/config.yaml";   
     YAML::Node config_file = YAML::LoadFile(config_file_path);
@@ -60,8 +58,9 @@ int main()
     for (int i = 0; i < controller.params.Nu; i++) {
         T_u[i] = i * controller.params.dt;
         U[i] = U_const;
-        // std::cout << i << ": " << (U_const * i).transpose() << std::endl;
     }
+
+
 
     // single rollout
     Solution sol;

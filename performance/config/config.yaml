@@ -6,7 +6,7 @@ SYS_PARAMS:
     m: 35.0                 # COM mass,[kg] 
     g: 9.81                 # gravity, [m/s^2] 
     k: 7500.0               # spring stiffness, [N/m]
-    b: 0.0                 # damping coeff, [Ns/m]
+    b: 50.0                 # damping coeff, [Ns/m]
     l0: 0.65                # nominal rest length, [m]
     r_min: 0.4              # min leg length, [m]
     r_max: 0.8              # max leg length, [m]
@@ -36,3 +36,15 @@ CTRL_PARAMS:
     R_diags: [0.1, 0.1]             # diagonal elements of the control cost matrix
     N_elite: 100                    # number of elite samples
     CEM_iters: 20                   # number of CEM iterations
+
+####################################################################
+# Distribution Parameters
+####################################################################
+
+DIST_PARAMS:
+    mu: [0.0, 0.0]              # initial means [l0dot_vel, thetadot_vel]
+    sigma: [0.1, 0.1]           # initial standard deviations
+    min_varaince: [0.05, 0.05]  # minimum variance of the state distribution
+    diag_cov: False             # strictly enforce diagonal covariance matrix
+    seed: 0                     # random seed
+    seed_enabled: False         # enable random seed

@@ -39,6 +39,10 @@ using Matrix_d_Traj = std::vector<Matrix_d>;
 
 using Domain_Traj = std::vector<Domain>;
 
+// Bundle of Trajectories
+using Vector_2d_Traj_Bundle = std::vector<Vector_2d_Traj>;
+using Vector_8d_Traj_Bundle = std::vector<Vector_8d_Traj>;
+
 // ***********************************************************************************
 // STRUCTS
 // ***********************************************************************************
@@ -71,11 +75,21 @@ struct ControlParams
     double dt;           // time step [sec]
     int K;               // number of parallel 
     int Nu;              // number of control points
-    Vector_8d Q_diags;   // diagonal elements of Q matrix
-    Vector_8d Qf_diags;  // diagonal elements of Qf matrix
-    Vector_2d R_diags;   // diagonal elements of R matrix
     int N_elite;         // number of elite control sequences
     int CEM_iters;       // number of CEM iterations
+    Matrix_8d Q;   // diagonal elements of Q matrix
+    Matrix_8d Qf;  // diagonal elements of Qf matrix
+    Matrix_2d R;   // diagonal elements of R matrix
+};
+
+// Distribution struct
+struct GaussianDistribution
+{
+    Vector_d mean;      // mean of the distribution
+    Matrix_d cov;       // covariance of the distribution
+    bool diag_cov;      // choose to enfoce diagonal covariance
+    int seed;           // random number generator seed
+    bool seed_enabled;  // enable random number generator seed
 };
 
 // dynamics solution struct

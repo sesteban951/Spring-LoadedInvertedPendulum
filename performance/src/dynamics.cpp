@@ -4,22 +4,22 @@
 Dynamics::Dynamics(YAML::Node config_file)
 {
     // set the system parameters
-    params.m = config_file["SYS_PARAMS"]["m"].as<double>();
-    params.g = config_file["SYS_PARAMS"]["g"].as<double>();
-    params.k = config_file["SYS_PARAMS"]["k"].as<double>();
-    params.b = config_file["SYS_PARAMS"]["b"].as<double>();
-    params.l0 = config_file["SYS_PARAMS"]["l0"].as<double>();
-    params.r_min = config_file["SYS_PARAMS"]["r_min"].as<double>();
-    params.r_max = config_file["SYS_PARAMS"]["r_max"].as<double>();
-    params.theta_min = config_file["SYS_PARAMS"]["theta_min"].as<double>();
-    params.theta_max = config_file["SYS_PARAMS"]["theta_max"].as<double>();
-    params.rdot_lim = config_file["SYS_PARAMS"]["rdot_lim"].as<double>();
-    params.thetadot_lim = config_file["SYS_PARAMS"]["thetadot_lim"].as<double>();
-    params.torque_ankle = config_file["SYS_PARAMS"]["torque_ankle"].as<bool>();
-    params.torque_ankle_lim = config_file["SYS_PARAMS"]["torque_ankle_lim"].as<double>();
-    params.torque_ankle_kp = config_file["SYS_PARAMS"]["torque_ankle_kp"].as<double>();
-    params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
-    params.interp = config_file["SYS_PARAMS"]["interp"].as<char>();
+    this->params.m = config_file["SYS_PARAMS"]["m"].as<double>();
+    this->params.g = config_file["SYS_PARAMS"]["g"].as<double>();
+    this->params.k = config_file["SYS_PARAMS"]["k"].as<double>();
+    this->params.b = config_file["SYS_PARAMS"]["b"].as<double>();
+    this->params.l0 = config_file["SYS_PARAMS"]["l0"].as<double>();
+    this->params.r_min = config_file["SYS_PARAMS"]["r_min"].as<double>();
+    this->params.r_max = config_file["SYS_PARAMS"]["r_max"].as<double>();
+    this->params.theta_min = config_file["SYS_PARAMS"]["theta_min"].as<double>();
+    this->params.theta_max = config_file["SYS_PARAMS"]["theta_max"].as<double>();
+    this->params.rdot_lim = config_file["SYS_PARAMS"]["rdot_lim"].as<double>();
+    this->params.thetadot_lim = config_file["SYS_PARAMS"]["thetadot_lim"].as<double>();
+    this->params.torque_ankle = config_file["SYS_PARAMS"]["torque_ankle"].as<bool>();
+    this->params.torque_ankle_lim = config_file["SYS_PARAMS"]["torque_ankle_lim"].as<double>();
+    this->params.torque_ankle_kp = config_file["SYS_PARAMS"]["torque_ankle_kp"].as<double>();
+    this->params.torque_ankle_kd = config_file["SYS_PARAMS"]["torque_ankle_kd"].as<double>();
+    this->params.interp = config_file["SYS_PARAMS"]["interp"].as<char>();
 }
 
 

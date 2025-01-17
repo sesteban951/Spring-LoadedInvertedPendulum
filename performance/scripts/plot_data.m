@@ -19,7 +19,7 @@ t_interval = [t(1) t(end)];
 
 % plotting / animation
 animate = 1;
-rt = 0.5; % realtime rate
+rt = 1.0; % realtime rate
 replays = 3;
 plot_com = 0;
 plot_foot = 0;
