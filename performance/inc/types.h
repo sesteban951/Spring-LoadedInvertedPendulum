@@ -4,6 +4,7 @@
 // standard libraries
 #include <Eigen/Dense>
 #include <vector>
+#include <tuple>
 
 // ***********************************************************************************
 // ENUMS
@@ -113,5 +114,11 @@ using Vector_d_Traj_Bundle = std::vector<Vector_d_Traj>;
 // Bundle of Solutions
 using Solution_Bundle = std::vector<Solution>;
 
+// ***********************************************************************************
+// Tuples
+// ***********************************************************************************
+
+// Monte Carlo Tuple
+using MC_Tuple = std::tuple<Solution_Bundle, Vector_2d_Traj_Bundle, Vector_1d_Traj>;
 
 #endif

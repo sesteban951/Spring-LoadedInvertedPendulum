@@ -89,10 +89,6 @@ void Controller::initialize_distribution(YAML::Node config_file)
 // sample input trajectories
 Vector_2d_Traj_Bundle Controller::sample_input_trajectory(int K)
 {
-    // initialize the input trajectory bundle
-    Vector_2d_Traj_Bundle U_bundle;
-    U_bundle.resize(K);
-
     // sample the input trajectories
     Vector_d mu = this->dist.mean;
     Matrix_d Sigma = this->dist.cov;
@@ -115,6 +111,9 @@ Vector_2d_Traj_Bundle Controller::sample_input_trajectory(int K)
     U_traj.resize(this->params.Nu);
 
     // U ~ N(mu, Sigma) <=> U = L * Z + mu; Z ~ N(0, I)
+    // initialize the input trajectory bundle
+    Vector_2d_Traj_Bundle U_bundle;
+    U_bundle.resize(K);
     for (int i = 0; i < K; i++) {
         // populate the Z vector
         for (int i = 0; i < mu.size(); i++) {
@@ -272,12 +271,13 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol, Vector_2d_T
 
 
 // perform open loop rollouts
-void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
+MC_Tuple Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
 {
     // compute u(t) dt (N of the integration is not necessarily equal to the number of control points)
     double T = (this->params.N-1) * this->params.dt;
     double dt_u = T / (this->params.Nu-1);
 
+    auto t0 = std::chrono::high_resolution_clock::now();
     // generate the time arrays
     Vector_1d_Traj T_x;
     Vector_1d_Traj T_u;
@@ -289,32 +289,50 @@ void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
     for (int i = 0; i < this->params.Nu; i++) {
         T_u[i] = i * dt_u;
     }
+    auto tf = std::chrono::high_resolution_clock::now();
+    std::cout << "Time to generate time arrays: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // generate bundle of input trajectories
     Vector_2d_Traj_Bundle U_bundle;
+    t0 = std::chrono::high_resolution_clock::now();
     U_bundle = this->sample_input_trajectory(this->params.K);
+    tf = std::chrono::high_resolution_clock::now();
+    std::cout << "Time to sample input trajectories: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // initialize the containers for the solutions
     Solution_Bundle Sol_bundle;
-    Vector_d J;
+    Vector_1d_Traj J;
     J.resize(U_bundle.size());
     Sol_bundle.resize(U_bundle.size());
 
     // generate the reference trajectory
     Vector_8d_Traj X_ref;
+    t0 = std::chrono::high_resolution_clock::now();
     X_ref = this->generate_reference_trajectory(x0_sys.head<4>());
+    tf = std::chrono::high_resolution_clock::now();
+    std::cout << "Time to generate reference trajectory: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // loop over the input trajectories
     Solution sol;
+    t0 = std::chrono::high_resolution_clock::now();
     for (int k = 0; k < U_bundle.size(); k++) {
-        
+
         // perform the rollout
         sol = this->dynamics.RK3_rollout(T_x, T_u, x0_sys, p0_foot, d0, U_bundle[k]);
 
         // compute the cost
-        J(k) = this->cost_function(X_ref, sol, U_bundle[k]);
+        J[k] = this->cost_function(X_ref, sol, U_bundle[k]);
 
         // store the solution
         Sol_bundle[k] = sol;
     }
+    tf = std::chrono::high_resolution_clock::now();
+    std::cout << "Time to perform rollouts: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
+
+    // pack solutions into a tuple
+    MC_Tuple mc_tuple;
+    mc_tuple = std::make_tuple(Sol_bundle, U_bundle, J);
+
+    // return the solutions
+    return mc_tuple;
 }

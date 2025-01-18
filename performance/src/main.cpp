@@ -79,7 +79,8 @@ int main()
     // std::cout << "Cost: " << J << std::endl;
 
     auto t0 = std::chrono::high_resolution_clock::now();
-    controller.monte_carlo(x, p_foot, d);
+    MC_Tuple mc_tuple;
+    mc_tuple = controller.monte_carlo(x, p_foot, d);
     auto tf = std::chrono::high_resolution_clock::now();
     std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 

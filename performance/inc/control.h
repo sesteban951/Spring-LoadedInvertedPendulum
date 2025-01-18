@@ -4,6 +4,8 @@
 // standard includes
 #include <iostream>
 #include <random>
+#include <chrono>
+#include <omp.h>
 
 // package includes
 #include "yaml-cpp/yaml.h"
@@ -36,7 +38,7 @@ class Controller
         double cost_function(Vector_8d_Traj X_des, Solution Sol, Vector_2d_Traj U);
 
         // perform open loop rollouts
-        void monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
+        MC_Tuple monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
 
     // private:
         // internal dynamics object
