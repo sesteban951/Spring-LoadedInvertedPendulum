@@ -25,6 +25,13 @@ class Controller
         // sample a bundle of control inputs from the distribution
         Vector_2d_Traj_Bundle sample_input_trajectory(int K);
 
+        // generate a reference trajectory for the predictive control to track
+        Vector_8d_Traj generate_reference_trajectory(Vector_4d x0_com);
+
+        // evaulate the cost function given a solution
+        double cost_function(Vector_8d_Traj X_des, Solution Sol);
+
+
     // private:
         // Control parameters
         ControlParams params;

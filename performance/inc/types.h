@@ -40,12 +40,6 @@ using Matrix_d_Traj = std::vector<Matrix_d>;
 
 using Domain_Traj = std::vector<Domain>;
 
-// Bundle of Trajectories
-using Vector_2d_Traj_Bundle = std::vector<Vector_2d_Traj>;
-using Vector_8d_Traj_Bundle = std::vector<Vector_8d_Traj>;
-
-using Vector_d_Traj_Bundle = std::vector<Vector_d_Traj>;
-
 // ***********************************************************************************
 // STRUCTS
 // ***********************************************************************************
@@ -105,3 +99,16 @@ struct Solution
     Domain_Traj domain_t;    // domain trajectory
     bool viability;          // viability of the trajectory
 };
+
+// ***********************************************************************************
+// Bundles
+// ***********************************************************************************
+
+// Bundle of Trajectories
+using Vector_2d_Traj_Bundle = std::vector<Vector_2d_Traj>;
+using Vector_8d_Traj_Bundle = std::vector<Vector_8d_Traj>;
+using Vector_d_Traj_Bundle = std::vector<Vector_d_Traj>;
+
+// Bundle of Solutions
+using Solution_Bundle = std::vector<Solution>;
+

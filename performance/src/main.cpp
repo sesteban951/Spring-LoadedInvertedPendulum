@@ -67,10 +67,16 @@ int main()
     auto t1 = std::chrono::high_resolution_clock::now();
     std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
 
-    Vector_2d_Traj_Bundle U_bundle = controller.sample_input_trajectory(controller.params.K);
 
-    // update the distribution parameters
-    controller.update_dsitribution_params(U_bundle);
+    // generate a reference trajectory
+    Vector_8d_Traj X_ref;
+    X_ref = controller.generate_reference_trajectory(x.head<4>());
+
+    // evaluate the cost function
+    double J = controller.cost_function(X_ref, sol);
+
+    std::cout << "Cost: " << J << std::endl;
+
 
     // where to save each trajectory
     std::string time_file = "../data/time.csv";

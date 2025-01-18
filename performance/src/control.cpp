@@ -32,6 +32,7 @@ Controller::Controller(YAML::Node config_file)
     this->initialize_distribution(config_file);
 }
 
+
 // construct the intial distribution
 void Controller::initialize_distribution(YAML::Node config_file)
 {
@@ -83,6 +84,7 @@ void Controller::initialize_distribution(YAML::Node config_file)
     this->rand_generator = rand_generator;
     this->normal_dist = normal_dist;
 }
+
 
 // sample input trajectories
 Vector_2d_Traj_Bundle Controller::sample_input_trajectory(int K)
@@ -180,4 +182,90 @@ void Controller::update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle)
     // update the distribution
     this->dist.mean = mean;
     this->dist.cov = cov;    
+}
+
+
+// generate a reference trajectory for the predictive control to track
+Vector_8d_Traj Controller::generate_reference_trajectory(Vector_4d x0_com)
+{
+    // pass reference to the dynamics
+    Vector_8d_Traj X_ref;
+    X_ref.resize(this->params.N);
+
+    // populate the reference trajectory
+    Vector_8d xi_ref;
+    double vx = 0.0;
+    for (int i = 0; i < this->params.N; i++) {
+        xi_ref << x0_com(0) + vx * this->params.dt,  // px
+                  0.7,                               // pz
+                  vx,                                // vx
+                  0.0,                               // vz
+                  0.65,                              // l0
+                  0.0,                               // theta
+                  0.0,                               // rdot
+                  0.0;                               // thetadot
+
+        // insert into trajectory
+        X_ref[i] = xi_ref;
+    }
+
+    return X_ref;
+}
+
+
+// evaulate the cost function given a solution
+double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol)
+{
+    // trajectory length 
+    int N = this->params.N;
+
+    // upack the relevant variables
+    Vector_6d_Traj X_sys = Sol.x_sys_t;
+    Vector_4d_Traj X_leg = Sol.x_leg_t;
+
+    // convert to matrix
+    Matrix_d X_sys_mat, X_leg_mat;
+    X_sys_mat.resize(6, N);
+    X_leg_mat.resize(4, N);
+    for (int i = 0; i < N; i++) {
+        X_sys_mat.col(i) = X_sys[i];
+        X_leg_mat.col(i) = X_leg[i];
+    }
+
+    // combine the COM state with the leg state
+    Matrix_d X_com;
+    X_com.resize(4, N);
+    X_com = X_sys_mat.block(0, 0, 4, N);
+    
+    Matrix_d X;
+    X.resize(8, N);
+    X << X_com, X_leg_mat;
+
+    // state cost
+    Vector_8d xi, xi_des, ei;
+    double J_state, cost;
+    J_state = 0.0;
+    for (int i = 0; i < N; i++) {
+        // compute error state
+        xi = X.col(i);
+        xi_des = X_ref[i];
+        ei = (xi - xi_des);
+
+        // compute the stage cost
+        cost = ei.transpose() * this->params.Q * ei;
+        J_state += cost;
+    }
+
+    // terminal cost
+    xi = X.col(N - 1);
+    xi_des = X_ref[N - 1];
+    ei = (xi - xi_des);
+    cost = ei.transpose() * this->params.Qf * ei;
+    J_state += cost;
+
+    // total cost
+    double J_total; 
+    J_total = J_state;
+
+    return J_total;
 }
