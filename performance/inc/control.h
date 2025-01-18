@@ -19,8 +19,11 @@ class Controller
         // to initialize the initial distribution
         void initialize_distribution(YAML::Node config_file);
 
+        // compute mean and covariance from a bundle of control inputs
+        void update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle);
+
         // sample a bundle of control inputs from the distribution
-        Vector_d_Traj sample_input_trajectory(int K);
+        Vector_2d_Traj_Bundle sample_input_trajectory(int K);
 
     // private:
         // Control parameters

@@ -60,8 +60,6 @@ int main()
         U[i] = U_const;
     }
 
-
-
     // single rollout
     Solution sol;
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -69,7 +67,10 @@ int main()
     auto t1 = std::chrono::high_resolution_clock::now();
     std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
 
-    Vector_d_Traj U_bundle = controller.sample_input_trajectory(3);
+    Vector_2d_Traj_Bundle U_bundle = controller.sample_input_trajectory(controller.params.K);
+
+    // update the distribution parameters
+    controller.update_dsitribution_params(U_bundle);
 
     // where to save each trajectory
     std::string time_file = "../data/time.csv";

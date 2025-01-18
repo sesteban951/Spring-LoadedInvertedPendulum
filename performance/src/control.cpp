@@ -38,6 +38,7 @@ void Controller::initialize_distribution(YAML::Node config_file)
     // initialize the matrices
     this->dist.mean.resize(this->params.Nu * 2);
     this->dist.cov.resize(this->params.Nu * 2, this->params.Nu * 2);
+    this->dist.mean.setZero();
     this->dist.cov.setZero();
 
     // set the initial mean
@@ -84,57 +85,99 @@ void Controller::initialize_distribution(YAML::Node config_file)
 }
 
 // sample input trajectories
-Vector_d_Traj Controller::sample_input_trajectory(int K)
+Vector_2d_Traj_Bundle Controller::sample_input_trajectory(int K)
 {
     // initialize the input trajectory bundle
-    Vector_d_Traj_Bundle U_bundle;
+    Vector_2d_Traj_Bundle U_bundle;
     U_bundle.resize(K);
 
-    std::cout << "1" << std::endl;
-
     // sample the input trajectories
-    Vector_d mean = this->dist.mean;
+    Vector_d mu = this->dist.mean;
     Matrix_d Sigma = this->dist.cov;
-
-    std::cout << "mean size: " << mean.size() << std::endl;
-    std::cout << "Sigma size: " << Sigma.rows() << "x" << Sigma.cols() << std::endl;
 
     // perform cholesky decomposition 
     Eigen::LLT<Matrix_d> llt(Sigma);  
     Matrix_d L = llt.matrixL();  
 
-    std::cout << "2" << std::endl;
-    std::cout << "L size: " << L.rows() << "x" << L.cols() << std::endl;
-
-    // Generate a standard normal vector
-    Vector_d Z = Vector_d::Zero(mean.size());
-    Z.resize(mean.size());
-
-    for (int i = 0; i < mean.size(); i++) {
-        Z(i) = this->normal_dist(this->rand_generator);
+    // check if the covariance is positive definite
+    if (llt.info() == Eigen::NumericalIssue) {
+        throw std::runtime_error("Covariance matrix is possibly not positive definite");
     }
 
-    std::cout << "Z: " << Z.size() << std::endl;
-    std::cout << "3" << std::endl;
+    // Generate random input trajectories and store them in the input bundle
+    Vector_d Z_vec, U_vec;
+    Vector_2d_Traj U_traj;
+    Vector_2d U_t;
+    Z_vec.resize(mu.size());
+    U_vec.resize(mu.size());
+    U_traj.resize(this->params.Nu);
 
-    // Generate a sample from the distribution
-    Vector_d Ut;
-    Ut.resize(mean.size());
-
-    std::cout << "Ut: " << Ut.size() << std::endl;
-
-    Ut = mean + L * Z;
-    Vector_d_Traj Ut_Traj;
-    Ut_Traj.resize(this->params.Nu);
-    for (int i = 0; i < this->params.Nu; i++) {
-        Ut_Traj[i] = Ut;
-    }
-
-    std::cout << "4" << std::endl;
-
+    // U ~ N(mu, Sigma) <=> U = L * Z + mu; Z ~ N(0, I)
     for (int i = 0; i < K; i++) {
-        std::cout << "Ut_Traj: " << Ut_Traj[i].transpose() << std::endl;
+        // populate the Z vector
+        for (int i = 0; i < mu.size(); i++) {
+            Z_vec(i) = this->normal_dist(this->rand_generator);
+        }
+
+        // generate the input trajectory
+        U_vec = L * Z_vec + mu;
+
+        // flatten U_vec into U_traj
+        for (int j = 0; j < this->params.Nu; j++) {
+            U_t = U_vec.segment<2>(2 * j);
+            U_traj[j] = U_t;
+        }
+
+        // store the input trajectory
+        U_bundle[i] = U_traj;
     }
 
-    return Ut_Traj;
+    return U_bundle;
+}
+
+
+// compute mean and covariance from a bundle of control inputs
+void Controller::update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle)
+{
+    // initialize the mean and covariance
+    Vector_d mean;
+    Matrix_d cov;
+    mean.resize(this->params.Nu * 2);
+    cov.resize(this->params.Nu * 2, this->params.Nu * 2);
+
+    // size of the bundle
+    int K = U_bundle.size(); // not necceseraly equal to this->params.K
+
+    // used for computing the mean
+    Matrix_d U_data;
+    U_data.resize(this->params.Nu * 2, K);
+
+    // compute the mean
+    Vector_2d_Traj U_traj;
+    Vector_d U_traj_vec;
+    U_traj_vec.resize(this->params.Nu * 2);
+    for (int i = 0; i < K; i++) {
+
+        // vectorize the input trajectory
+        U_traj = U_bundle[i];
+        for (int j = 0; j < this->params.Nu; j++) {
+            U_traj_vec.segment<2>(2 * j) = U_traj[j];
+        }
+        mean += U_traj_vec;
+
+        // insert into data matrix to use later
+        U_data.col(i) = U_traj_vec;
+    }
+    mean /= K;
+
+    // compute the sample covariance (K-1 b/c Bessel correction)
+    cov = (1.0 / (K-1)) * (U_data.colwise() - mean) * (U_data.colwise() - mean).transpose();
+
+    // TODO: Add an epsilon to eigenvalues for numerical stability
+    // TODO: Add stricly diagonal covariance option
+    // TODO: Add lower bounding of the covariance
+
+    // update the distribution
+    this->dist.mean = mean;
+    this->dist.cov = cov;    
 }
