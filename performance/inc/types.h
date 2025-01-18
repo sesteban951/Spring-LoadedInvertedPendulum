@@ -1,4 +1,5 @@
-#pragma once
+#ifndef TYPES_H
+#define TYPES_H
 
 // standard libraries
 #include <Eigen/Dense>
@@ -112,3 +113,5 @@ using Vector_d_Traj_Bundle = std::vector<Vector_d_Traj>;
 // Bundle of Solutions
 using Solution_Bundle = std::vector<Solution>;
 
+
+#endif

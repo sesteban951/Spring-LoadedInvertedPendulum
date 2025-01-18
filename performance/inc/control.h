@@ -1,3 +1,6 @@
+#ifndef CONTROL_H
+#define CONTROL_H
+
 // standard includes
 #include <iostream>
 #include <random>
@@ -31,8 +34,11 @@ class Controller
         // evaulate the cost function given a solution
         double cost_function(Vector_8d_Traj X_des, Solution Sol);
 
+        // perform open loop rollouts
+        void monte_carlo(Vector_8d x0_sys, Vector_2d p0_foot, Domain d0, Vector_2d_Traj_Bundle U_bundle);
 
     // private:
+
         // Control parameters
         ControlParams params;
         GaussianDistribution dist;
@@ -41,3 +47,5 @@ class Controller
         std::mt19937 rand_generator;
         std::normal_distribution<double> normal_dist;
 };
+
+#endif

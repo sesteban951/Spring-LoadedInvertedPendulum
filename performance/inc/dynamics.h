@@ -1,3 +1,6 @@
+#ifndef DYNAMICS_H
+#define DYNAMICS_H
+
 // standard includes
 #include <iostream>
 
@@ -65,3 +68,5 @@ class Dynamics
         // System parameters
         SystemParams params;
 };
+
+#endif

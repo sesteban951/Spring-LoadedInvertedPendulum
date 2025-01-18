@@ -269,3 +269,49 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol)
 
     return J_total;
 }
+
+
+// perform open loop rollouts
+void Controller::monte_carlo(Vector_8d x0_sys, Vector_2d p0_foot, Domain d0, Vector_2d_Traj_Bundle U_bundle)
+{
+    // compute u(t) dt (N of the integration is not necessarily equal to the number of control points)
+    double T = (this->params.N-1) * this->params.dt;
+    double dt_u = T / (this->params.Nu-1);
+
+    // generate the time arrays
+    Vector_1d_Traj T_x;
+    Vector_1d_Traj T_u;
+    T_x.resize(this->params.N);
+    T_u.resize(this->params.Nu);
+    for (int i = 0; i < this->params.N; i++) {
+        T_x[i] = i * this->params.dt;
+    }
+    for (int i = 0; i < this->params.Nu; i++) {
+        T_u[i] = i * dt_u;
+    }
+
+    // initialize the containers for the solutions
+    Solution_Bundle Sol_bundle;
+    Vector_d J;
+    J.resize(U_bundle.size());
+    Sol_bundle.resize(U_bundle.size());
+
+    // generate the reference trajectory
+    Vector_8d_Traj X_ref;
+    X_ref = this->generate_reference_trajectory(x0_sys.head<4>());
+
+    // loop over the input trajectories
+    Solution sol;
+    for (int k = 0; k < U_bundle.size(); k++) {
+        
+        // perform the rollout
+        // sol = this->dynamics.RK3_rollout(T_x, T_u, x0_sys, p0_foot, d0, U_bundle[k]);
+
+        // // compute the cost
+        // J(k) = this->cost_function(U_bundle[k], sol);
+
+        // // store the solution
+        // Sol_bundle.push_back(sol);
+    }
+
+}
