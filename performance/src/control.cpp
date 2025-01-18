@@ -214,7 +214,7 @@ Vector_8d_Traj Controller::generate_reference_trajectory(Vector_4d x0_com)
 
 
 // evaulate the cost function given a solution
-double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol)
+double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol, Vector_2d_Traj U)
 {
     // trajectory length 
     int N = this->params.N;
@@ -272,8 +272,7 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol)
 
 
 // perform open loop rollouts
-void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0, 
-                             Vector_2d_Traj_Bundle U_bundle)
+void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
 {
     // compute u(t) dt (N of the integration is not necessarily equal to the number of control points)
     double T = (this->params.N-1) * this->params.dt;
@@ -290,6 +289,10 @@ void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0,
     for (int i = 0; i < this->params.Nu; i++) {
         T_u[i] = i * dt_u;
     }
+
+    // generate bundle of input trajectories
+    Vector_2d_Traj_Bundle U_bundle;
+    U_bundle = this->sample_input_trajectory(this->params.K);
 
     // initialize the containers for the solutions
     Solution_Bundle Sol_bundle;
@@ -308,11 +311,10 @@ void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0,
         // perform the rollout
         sol = this->dynamics.RK3_rollout(T_x, T_u, x0_sys, p0_foot, d0, U_bundle[k]);
 
-        // // compute the cost
-        J(k) = this->cost_function(U_bundle[k], sol);
+        // compute the cost
+        J(k) = this->cost_function(X_ref, sol, U_bundle[k]);
 
-        // // store the solution
-        Sol_bundle.[k] = sol;
-
+        // store the solution
+        Sol_bundle[k] = sol;
     }
 }

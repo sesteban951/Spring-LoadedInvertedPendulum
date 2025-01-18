@@ -33,11 +33,10 @@ class Controller
         Vector_8d_Traj generate_reference_trajectory(Vector_4d x0_com);
 
         // evaulate the cost function given a solution
-        double cost_function(Vector_8d_Traj X_des, Solution Sol);
+        double cost_function(Vector_8d_Traj X_des, Solution Sol, Vector_2d_Traj U);
 
         // perform open loop rollouts
-        void monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0, 
-                         Vector_2d_Traj_Bundle U_bundle);
+        void monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
 
     // private:
         // internal dynamics object

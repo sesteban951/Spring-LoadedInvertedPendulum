@@ -60,75 +60,81 @@ int main()
         U[i] = U_const;
     }
 
+
     // single rollout
     Solution sol;
-    auto t0 = std::chrono::high_resolution_clock::now();
-    sol = dynamics.RK3_rollout(T_x, T_u, x, p_foot, d, U);
-    auto t1 = std::chrono::high_resolution_clock::now();
-    std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
+    // auto t0 = std::chrono::high_resolution_clock::now();
+    // sol = dynamics.RK3_rollout(T_x, T_u, x, p_foot, d, U);
+    // auto t1 = std::chrono::high_resolution_clock::now();
+    // std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
 
 
     // generate a reference trajectory
-    Vector_8d_Traj X_ref;
-    X_ref = controller.generate_reference_trajectory(x.head<4>());
+    // Vector_8d_Traj X_ref;
+    // X_ref = controller.generate_reference_trajectory(x.head<4>());
 
-    // evaluate the cost function
-    double J = controller.cost_function(X_ref, sol);
+    // // evaluate the cost function
+    // double J = controller.cost_function(X_ref, sol, U);
 
-    std::cout << "Cost: " << J << std::endl;
+    // std::cout << "Cost: " << J << std::endl;
+
+    auto t0 = std::chrono::high_resolution_clock::now();
+    controller.monte_carlo(x, p_foot, d);
+    auto tf = std::chrono::high_resolution_clock::now();
+    std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
 
-    // where to save each trajectory
-    std::string time_file = "../data/time.csv";
-    std::string x_sys_file = "../data/state_sys.csv";
-    std::string x_leg_file = "../data/state_leg.csv";
-    std::string x_foot_file = "../data/state_foot.csv";
-    std::string u_file = "../data/input.csv";
-    std::string domain_file = "../data/domain.csv";
+    // // where to save each trajectory
+    // std::string time_file = "../data/time.csv";
+    // std::string x_sys_file = "../data/state_sys.csv";
+    // std::string x_leg_file = "../data/state_leg.csv";
+    // std::string x_foot_file = "../data/state_foot.csv";
+    // std::string u_file = "../data/input.csv";
+    // std::string domain_file = "../data/domain.csv";
 
-    // save the solution to a file
-    std::ofstream file;
+    // // save the solution to a file
+    // std::ofstream file;
 
-    file.open(time_file);
-    for (int i = 0; i < T_x.size(); i++) {
-        file << T_x[i] << std::endl;
-    }
-    file.close();
+    // file.open(time_file);
+    // for (int i = 0; i < T_x.size(); i++) {
+    //     file << T_x[i] << std::endl;
+    // }
+    // file.close();
 
-    file.open(x_sys_file);
-    for (int i = 0; i < sol.x_sys_t.size(); i++) {
-        file << sol.x_sys_t[i].transpose() << std::endl;
-    }
-    file.close();
+    // file.open(x_sys_file);
+    // for (int i = 0; i < sol.x_sys_t.size(); i++) {
+    //     file << sol.x_sys_t[i].transpose() << std::endl;
+    // }
+    // file.close();
 
-    file.open(x_leg_file);
-    for (int i = 0; i < sol.x_leg_t.size(); i++) {
-        file << sol.x_leg_t[i].transpose() << std::endl;
-    }
-    file.close();
+    // file.open(x_leg_file);
+    // for (int i = 0; i < sol.x_leg_t.size(); i++) {
+    //     file << sol.x_leg_t[i].transpose() << std::endl;
+    // }
+    // file.close();
 
-    file.open(x_foot_file);
-    for (int i = 0; i < sol.x_foot_t.size(); i++) {
-        file << sol.x_foot_t[i].transpose() << std::endl;
-    }
-    file.close();
+    // file.open(x_foot_file);
+    // for (int i = 0; i < sol.x_foot_t.size(); i++) {
+    //     file << sol.x_foot_t[i].transpose() << std::endl;
+    // }
+    // file.close();
 
-    file.open(u_file);
-    for (int i = 0; i < sol.u_t.size(); i++) {
-        file << sol.u_t[i].transpose() << std::endl;
-    }
-    file.close();
+    // file.open(u_file);
+    // for (int i = 0; i < sol.u_t.size(); i++) {
+    //     file << sol.u_t[i].transpose() << std::endl;
+    // }
+    // file.close();
 
-    file.open(domain_file);
-    for (int i = 0; i < sol.domain_t.size(); i++) {
-        if (sol.domain_t[i] == Domain::FLIGHT) {
-            file << 0 << std::endl;
-        }
-        else if (sol.domain_t[i] == Domain::GROUND) {
-            file << 1 << std::endl;
-        }
-    }
-    file.close();
+    // file.open(domain_file);
+    // for (int i = 0; i < sol.domain_t.size(); i++) {
+    //     if (sol.domain_t[i] == Domain::FLIGHT) {
+    //         file << 0 << std::endl;
+    //     }
+    //     else if (sol.domain_t[i] == Domain::GROUND) {
+    //         file << 1 << std::endl;
+    //     }
+    // }
+    // file.close();
 
     return 0;
 }
