@@ -10,13 +10,14 @@
 
 // custom includes
 #include "types.h"
+#include "dynamics.h"
 
 // class for my controller
 class Controller
 {
     public:
         // Constructor and Destructor
-        Controller(YAML::Node config_file);  
+        Controller(YAML::Node config_file);
         ~Controller(){};
 
         // to initialize the initial distribution
@@ -35,12 +36,17 @@ class Controller
         double cost_function(Vector_8d_Traj X_des, Solution Sol);
 
         // perform open loop rollouts
-        void monte_carlo(Vector_8d x0_sys, Vector_2d p0_foot, Domain d0, Vector_2d_Traj_Bundle U_bundle);
+        void monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0, 
+                         Vector_2d_Traj_Bundle U_bundle);
 
     // private:
+        // internal dynamics object
+        Dynamics dynamics;
 
         // Control parameters
         ControlParams params;
+
+        // distribution parameters
         GaussianDistribution dist;
 
         // random number generator

@@ -1,6 +1,6 @@
 #include "../inc/control.h"
 
-Controller::Controller(YAML::Node config_file)
+Controller::Controller(YAML::Node config_file) : dynamics(config_file)
 {
     // set the control parameters
     this->params.N = config_file["CTRL_PARAMS"]["N"].as<int>();
@@ -272,7 +272,8 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol)
 
 
 // perform open loop rollouts
-void Controller::monte_carlo(Vector_8d x0_sys, Vector_2d p0_foot, Domain d0, Vector_2d_Traj_Bundle U_bundle)
+void Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0, 
+                             Vector_2d_Traj_Bundle U_bundle)
 {
     // compute u(t) dt (N of the integration is not necessarily equal to the number of control points)
     double T = (this->params.N-1) * this->params.dt;
@@ -305,13 +306,13 @@ void Controller::monte_carlo(Vector_8d x0_sys, Vector_2d p0_foot, Domain d0, Vec
     for (int k = 0; k < U_bundle.size(); k++) {
         
         // perform the rollout
-        // sol = this->dynamics.RK3_rollout(T_x, T_u, x0_sys, p0_foot, d0, U_bundle[k]);
+        sol = this->dynamics.RK3_rollout(T_x, T_u, x0_sys, p0_foot, d0, U_bundle[k]);
 
         // // compute the cost
-        // J(k) = this->cost_function(U_bundle[k], sol);
+        J(k) = this->cost_function(U_bundle[k], sol);
 
         // // store the solution
-        // Sol_bundle.push_back(sol);
-    }
+        Sol_bundle.[k] = sol;
 
+    }
 }
