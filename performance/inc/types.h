@@ -86,7 +86,6 @@ struct GaussianDistribution
 {
     Vector_d mean;      // mean of the distribution
     Matrix_d cov;       // covariance of the distribution
-    Matrix_d L;         // Cholesky decomposition lower triangular matrix
     double epsilon;     // small value to add to the diagonal of the covariance
     bool diag_cov;      // choose to enfoce diagonal covariance
     bool seed_enabled;  // enable random number generator seed

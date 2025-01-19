@@ -199,8 +199,11 @@ void Controller::update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle)
     // rebuild the covariance matrix with the eigenvalue decomposition, add epsilon to eigenvalues
     cov = eigvec * eigval.asDiagonal() * eigvec_inv;
 
-    // TODO: Add stricly diagonal covariance option
-    // TODO: Add lower bounding of the covariance
+    //  if stricly diagonal covariance option
+    if (this->dist.diag_cov == true) {
+        // set the covariance to be diagonal, (Hadamard Product, cov * I = diag(cov))
+        cov = cov.cwiseProduct(Matrix_d::Identity(this->params.Nu * 2, this->params.Nu * 2));
+    }
 
     // update the distribution
     this->dist.mean = mean;
@@ -425,6 +428,9 @@ Solution Controller::sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_
         std::cout << "CEM Iteration: " << i << std::endl;
         std::cout << "-----------------------------------" << std::endl;
         std::cout << "Time for iteration: " << std::chrono::duration<double, std::milli>(tf - t0).count() << " ms" << std::endl;
+
+        // print the norm of the covaraince matrix
+        std::cout << "Norm of covariance: " << this->dist.cov.norm() << std::endl;
     }
     
     // Return the final solution

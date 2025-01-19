@@ -56,8 +56,8 @@ DIST_PARAMS:
 
 STATE:
     x0: [0.0, 0.7, 1.0, 1.0, # COM: px, pz, vx, vz  (center of mass state)
-         0.65, 0.0]           # COMMAND: l0_command, thetadot_command (single integrator state)
+         0.65, 0.0]          # COMMAND: l0_command, thetadot_command (single integrator state)
     pz_des: 0.6              # desired z-position [m]
     vx_des: 2.0              # desired velocity [m/s]
-    r_des: 0.6              # desired leg length [m]    
+    r_des: 0.6               # desired leg length [m]    
     
