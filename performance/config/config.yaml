@@ -35,7 +35,7 @@ CTRL_PARAMS:
                8.0, 8.0, 3.0, 3.0]  # LEG: r, theta, rdot, thetadot
     R_diags: [2.0, 2.0]             # diagonal elements of the control cost matrix
     N_elite: 750                    # number of elite samples
-    CEM_iters: 20                   # number of CEM iterations
+    CEM_iters: 25                   # number of CEM iterations
 
 ####################################################################
 # Distribution Parameters
@@ -58,6 +58,6 @@ STATE:
     x0: [0.0, 0.7, 1.0, 1.0, # COM: px, pz, vx, vz  (center of mass state)
          0.65, 0.0]           # COMMAND: l0_command, thetadot_command (single integrator state)
     pz_des: 0.6              # desired z-position [m]
-    vx_des: 0.0              # desired velocity [m/s]
+    vx_des: 2.0              # desired velocity [m/s]
     r_des: 0.6              # desired leg length [m]    
     
