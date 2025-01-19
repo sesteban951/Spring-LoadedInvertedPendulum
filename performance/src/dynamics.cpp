@@ -500,7 +500,7 @@ Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
         x_sys_t[k] = xk_sys;
         x_leg_t[k] = xk_leg;
         x_foot_t[k] = xk_foot;
-        u_t[k] = uk;
+        u_t[k] = u3;
         domain_t[k] = dk;
     }
 

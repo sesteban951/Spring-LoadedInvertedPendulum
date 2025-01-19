@@ -62,7 +62,10 @@ class Controller
         std::mt19937 rand_generator;
         std::normal_distribution<double> normal_dist;
 
-        // 
+        // desired reference trajectory
+        double pz_des;
+        double vx_des;
+        double r_des;
 };
 
 #endif

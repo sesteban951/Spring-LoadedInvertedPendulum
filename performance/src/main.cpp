@@ -30,12 +30,13 @@ int main()
     Domain d0;
 
     // initial conditions
-    x0 << 0.0,    // px_com
-          0.75, // pz_com
-          1.5,    // vx_com
-          1.5,    // vz_com
-          dynamics.params.l0,    // l0_command
-          0.0;                   // theta_command
+    std::vector<double> x0_temp = config_file["STATE"]["x0"].as<std::vector<double>>();
+    x0 << x0_temp[0],    // px_com
+          x0_temp[1],    // pz_com
+          x0_temp[2],    // vx_com
+          x0_temp[3],    // vz_com
+          x0_temp[4],    // l0_command
+          x0_temp[5];    // theta_command
     p0_foot << 0.0,  // px_foot
                0.0;  // pz_foot
     d0 = Domain::FLIGHT;

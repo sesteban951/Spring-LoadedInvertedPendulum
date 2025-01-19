@@ -28,6 +28,11 @@ Controller::Controller(YAML::Node config_file) : dynamics(config_file)
         this->params.R(i, i) = R_diags_temp[i];
     }
 
+    // desired state variables
+    this->pz_des = config_file["STATE"]["pz_des"].as<double>();
+    this->vx_des = config_file["STATE"]["vx_des"].as<double>();
+    this->r_des = config_file["STATE"]["r_des"].as<double>();
+
     // construct the initial distribution
     this->initialize_distribution(config_file);
 }
@@ -186,7 +191,7 @@ void Controller::update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle)
     Vector_d eigval = eig.eigenvalues();
     Matrix_d eigvec_inv = eigvec.inverse();
 
-    // // modify eigenvalues with epsilon if it gets too low
+    // modify eigenvalues with epsilon if it gets too low
     for (int i = 0; i < eigval.size(); i++) {
         eigval(i) = std::max(eigval(i), this->dist.epsilon);
     }
@@ -212,16 +217,15 @@ Vector_8d_Traj Controller::generate_reference_trajectory(Vector_4d x0_com)
 
     // populate the reference trajectory
     Vector_8d xi_ref;
-    double vx = 0.0;
     for (int i = 0; i < this->params.N; i++) {
-        xi_ref << x0_com(0) + vx * this->params.dt,  // px
-                  0.65,                               // pz
-                  vx,                                // vx
-                  0.0,                               // vz
-                  0.65,                              // l0
-                  0.0,                               // theta
-                  0.0,                               // rdot
-                  0.0;                               // thetadot
+        xi_ref << x0_com(0) + this->vx_des * this->params.dt,  // px
+                  this->pz_des,             // pz
+                  this->vx_des,             // vx
+                  0.0,                      // vz
+                  this->r_des, // l0
+                  0.0,                      // theta
+                  0.0,                      // rdot
+                  0.0;                      // thetadot
 
         // insert into trajectory
         X_ref[i] = xi_ref;
@@ -274,6 +278,14 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol, Vector_2d_T
         J_state += cost;
     }
 
+    // input cost
+    Vector_2d ui;
+    double J_input = 0.0;
+    for (int i = 0; i < N; i++) {
+        ui = U[i];
+        J_input += ui.transpose() * this->params.R * ui;
+    }
+
     // terminal cost
     xi = X.col(N - 1);
     xi_des = X_ref[N - 1];
@@ -283,7 +295,7 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol, Vector_2d_T
 
     // total cost
     double J_total; 
-    J_total = J_state;
+    J_total = J_state + J_input;
 
     return J_total;
 }
@@ -391,7 +403,9 @@ Solution Controller::sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_
     J.resize(this->params.K);
 
     for (int i = 0; i < this->params.CEM_iters; i++) {
+
         // perform monte carlo simulation
+        auto t0 = std::chrono::high_resolution_clock::now();
         mc = this->monte_carlo(x0_sys, p0_foot, d0);
 
         // the monte carlos results
@@ -404,8 +418,15 @@ Solution Controller::sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_
 
         // update the distribution parameters
         this->update_dsitribution_params(U_elite);
-    }
+        auto tf = std::chrono::high_resolution_clock::now();
 
+        // print some info
+        std::cout << "\n-----------------------------------" << std::endl;
+        std::cout << "CEM Iteration: " << i << std::endl;
+        std::cout << "-----------------------------------" << std::endl;
+        std::cout << "Time for iteration: " << std::chrono::duration<double, std::milli>(tf - t0).count() << " ms" << std::endl;
+    }
+    
     // Return the final solution
     return S_elite[0];
 }

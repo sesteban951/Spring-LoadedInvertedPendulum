@@ -18,11 +18,11 @@ t_interval = [t(1) t(end)];
 % t_interval = [0 1.0];
 
 % plotting / animation
-animate = 1;
-rt = 0.5; % realtime rate
-replays = 3;
-plot_com = 0;
-plot_foot = 0;
+animate = 1;   % animatio = 1; plot states = 0
+rt = 1.0;      % realtime rate
+replays = 3;   % how many times to replay the animation
+plot_com = 1;  % plot the foot trajectory
+plot_foot = 1; % plot the foot trajectory
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -152,8 +152,8 @@ if animate == 0
     plot(t, u(:,2), 'LineWidth', 2);
     xlabel('Time [sec]');
     ylabel('Input');
-    title('l0 rate input');
-    legend('$l_0$', '$\theta$', 'interpreter', 'latex');
+    title('rate input');
+    legend('$\hat{\dot{l_0}}$', '$\hat{\dot{\theta}}$', 'interpreter', 'latex');
     grid on;
 
     % DOMAIN
