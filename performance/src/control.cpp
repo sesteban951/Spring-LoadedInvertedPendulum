@@ -42,6 +42,9 @@ void Controller::initialize_distribution(YAML::Node config_file)
     this->dist.mean.setZero();
     this->dist.cov.setZero();
 
+    // set the epsilon for numerical stability of covariance matrix
+    this->dist.epsilon = config_file["DIST_PARAMS"]["epsilon"].as<double>();
+
     // set the initial mean
     std::vector<double> mean_temp = config_file["DIST_PARAMS"]["mu"].as<std::vector<double>>();
     Vector_2d mean;
@@ -162,7 +165,7 @@ void Controller::update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle)
         // vectorize the input trajectory
         U_traj = U_bundle[i];
         for (int j = 0; j < this->params.Nu; j++) {
-            U_traj_vec.segment<2>(2 * j) = U_traj[j];
+            U_traj_vec.segment(2 * j, 2) = U_traj[j];
         }
         mean += U_traj_vec;
 
@@ -173,8 +176,24 @@ void Controller::update_dsitribution_params(Vector_2d_Traj_Bundle U_bundle)
 
     // compute the sample covariance (K-1 b/c Bessel correction)
     cov = (1.0 / (K-1)) * (U_data.colwise() - mean) * (U_data.colwise() - mean).transpose();
+    
+    // compute the eigenvalue decomposition
+    Eigen::SelfAdjointEigenSolver<Matrix_d> eig(cov);
+    if (eig.info() == Eigen::NumericalIssue) {
+        throw std::runtime_error("Covariance matrix is possibly not positive definite");
+    }
+    Matrix_d eigvec = eig.eigenvectors();
+    Vector_d eigval = eig.eigenvalues();
+    Matrix_d eigvec_inv = eigvec.inverse();
 
-    // TODO: Add an epsilon to eigenvalues for numerical stability
+    // // modify eigenvalues with epsilon if it gets too low
+    for (int i = 0; i < eigval.size(); i++) {
+        eigval(i) = std::max(eigval(i), this->dist.epsilon);
+    }
+
+    // rebuild the covariance matrix with the eigenvalue decomposition, add epsilon to eigenvalues
+    cov = eigvec * eigval.asDiagonal() * eigvec_inv;
+
     // TODO: Add stricly diagonal covariance option
     // TODO: Add lower bounding of the covariance
 
@@ -196,7 +215,7 @@ Vector_8d_Traj Controller::generate_reference_trajectory(Vector_4d x0_com)
     double vx = 0.0;
     for (int i = 0; i < this->params.N; i++) {
         xi_ref << x0_com(0) + vx * this->params.dt,  // px
-                  0.7,                               // pz
+                  0.65,                               // pz
                   vx,                                // vx
                   0.0,                               // vz
                   0.65,                              // l0
@@ -328,55 +347,31 @@ MC_Result Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0
 }
 
 
-// select the best inputs based on cost
-Vector_2d_Traj_Bundle Controller::sort_inputs(Vector_2d_Traj_Bundle U, Vector_1d_Traj J)
+// select solutions based on cost
+void Controller::sort_trajectories(Solution_Bundle  S,       Vector_2d_Traj_Bundle U,
+                                   Solution_Bundle& S_elite, Vector_2d_Traj_Bundle& U_elite,
+                                   Vector_1d_Traj J)
 {
-    // elite input bundle
-    Vector_2d_Traj_Bundle U_elite;
-    U_elite.resize(this->params.N_elite);
-
-    for ( int i = 0; i < this->params.K; i++ ) {
-        std::cout << J[i] << "  |  ";
-        Vector_2d_Traj Ui = U[i];
-        for (int j = 0; j < Ui.size(); j++) {
-            std::cout << Ui[j](0) << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    std::cout << "=====================" << std::endl;
-
     // sort the cost vector in ascending order
     std::vector<int> idx(J.size());
     std::iota(idx.begin(), idx.end(), 0);
     std::sort(idx.begin(), idx.end(), [&J](int i1, int i2) {return J[i1] < J[i2];});
 
-    for ( int i = 0; i < idx.size(); i++ ) {
-        std::cout << J[idx[i]]  << "  |  ";
-        Vector_2d_Traj Ui = U[idx[i]];
-        for (int j = 0; j < Ui.size(); j++) {
-            std::cout << Ui[j](0) << " ";
-        }
-        std::cout << std::endl;
+    // select the best solutions
+    Solution_Bundle S_elite_;
+    S_elite_.resize(this->params.N_elite);
+    for (int i = 0; i < this->params.N_elite; i++) {
+        S_elite_[i] = S[idx[i]];
     }
-
-    std::cout << "=====================" << std::endl;
+    S_elite = S_elite_;
 
     // select the best inputs
+    Vector_2d_Traj_Bundle U_elite_;
+    U_elite_.resize(this->params.N_elite);
     for (int i = 0; i < this->params.N_elite; i++) {
-        U_elite[i] = U[idx[i]];
+        U_elite_[i] = U[idx[i]];
     }
-
-    for ( int i = 0; i < U_elite.size(); i++ ) {
-        std::cout << J[idx[i]]  << "  |  ";
-        Vector_2d_Traj Ui = U_elite[i];
-        for (int j = 0; j < Ui.size(); j++) {
-            std::cout << Ui[j](0) << " ";
-        }
-        std::cout << std::endl;
-    }
-
-    return U_elite;
+    U_elite = U_elite_;
 }
 
 
@@ -387,27 +382,30 @@ Solution Controller::sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_
     MC_Result mc;
 
     // variables for unpacked variables
+    Solution_Bundle S, S_elite;
     Vector_2d_Traj_Bundle U, U_elite;
+    S_elite.resize(this->params.N_elite);
+    U_elite.resize(this->params.N_elite);
+
     Vector_1d_Traj J;
     J.resize(this->params.K);
-    U.resize(this->params.K);
-    U_elite.resize(this->params.N_elite);
 
     for (int i = 0; i < this->params.CEM_iters; i++) {
         // perform monte carlo simulation
         mc = this->monte_carlo(x0_sys, p0_foot, d0);
 
         // the monte carlos results
+        S = mc.S;
         U = mc.U;
         J = mc.J;
 
         // sort the cost vector in ascending order
-        U_elite = this->sort_inputs(U, J);
+        this->sort_trajectories(S, U, S_elite, U_elite, J);
 
         // update the distribution parameters
         this->update_dsitribution_params(U_elite);
     }
 
     // Return the final solution
-    return mc.S[0];
+    return S_elite[0];
 }

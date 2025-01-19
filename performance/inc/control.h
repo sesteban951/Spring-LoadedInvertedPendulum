@@ -40,8 +40,10 @@ class Controller
         // perform open loop rollouts
         MC_Result monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
 
-        // sort inputs based on cost
-        Vector_2d_Traj_Bundle sort_inputs(Vector_2d_Traj_Bundle U, Vector_1d_Traj J);
+        // sort solutions based on cost
+        void sort_trajectories(Solution_Bundle  S,       Vector_2d_Traj_Bundle  U,
+                               Solution_Bundle& S_elite, Vector_2d_Traj_Bundle& U_elite,
+                               Vector_1d_Traj J);
 
         // sampling predictive control scheme here
         Solution sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
@@ -59,6 +61,8 @@ class Controller
         // random number generator
         std::mt19937 rand_generator;
         std::normal_distribution<double> normal_dist;
+
+        // 
 };
 
 #endif

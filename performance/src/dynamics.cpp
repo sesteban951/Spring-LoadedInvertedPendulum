@@ -506,6 +506,7 @@ Solution Dynamics::RK3_rollout(Vector_1d_Traj T_x, Vector_1d_Traj T_u,
 
     // pack the solution into the solution struct
     Solution sol;
+    sol.t = T_x;
     sol.x_sys_t = x_sys_t;
     sol.x_leg_t = x_leg_t;
     sol.x_foot_t = x_foot_t;

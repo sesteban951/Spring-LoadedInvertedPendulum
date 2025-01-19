@@ -70,15 +70,15 @@ struct SystemParams
 // struct to hold control parameters
 struct ControlParams
 {
-    int N;               // number of system dynamics integration steps
-    double dt;           // time step [sec]
-    int K;               // number of parallel 
-    int Nu;              // number of control points
-    int N_elite;         // number of elite control sequences
-    int CEM_iters;       // number of CEM iterations
-    Matrix_8d Q;   // diagonal elements of Q matrix
-    Matrix_8d Qf;  // diagonal elements of Qf matrix
-    Matrix_2d R;   // diagonal elements of R matrix
+    int N;           // number of system dynamics integration steps
+    double dt;       // time step [sec]
+    int K;           // number of parallel 
+    int Nu;          // number of control points
+    int N_elite;     // number of elite control sequences
+    int CEM_iters;   // number of CEM iterations
+    Matrix_8d Q;     // diagonal elements of Q matrix
+    Matrix_8d Qf;    // diagonal elements of Qf matrix
+    Matrix_2d R;     // diagonal elements of R matrix
 };
 
 // Distribution struct
@@ -86,14 +86,17 @@ struct GaussianDistribution
 {
     Vector_d mean;      // mean of the distribution
     Matrix_d cov;       // covariance of the distribution
+    Matrix_d L;         // Cholesky decomposition lower triangular matrix
+    double epsilon;     // small value to add to the diagonal of the covariance
     bool diag_cov;      // choose to enfoce diagonal covariance
-    int seed;           // random number generator seed
     bool seed_enabled;  // enable random number generator seed
+    int seed;           // random number generator seed
 };
 
 // dynamics solution struct
 struct Solution
 {
+    Vector_1d_Traj t;        // time trajectory
     Vector_6d_Traj x_sys_t;  // system state trajectory
     Vector_4d_Traj x_leg_t;  // leg state trajectory
     Vector_4d_Traj x_foot_t; // foot state trajectory
