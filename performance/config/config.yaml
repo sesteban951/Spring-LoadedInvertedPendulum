@@ -27,15 +27,15 @@ SYS_PARAMS:
 CTRL_PARAMS:
     N: 100                          # number of time steps
     dt: 0.01                        # time step, [s]
-    K: 1000                         # number of rollouts
-    Nu: 25                          # number of control points
+    K: 10                         # number of rollouts
+    Nu: 5                          # number of control points
     Q_diags:  [0.0, 5.0, 2.0, 0.05, # diagonal elements of the cost matrix
                5.0, 5.0, 0.1, 1.0]   
     Qf_diags: [0.0, 5.0, 2.0, 0.05, # diagonal elements of the terminal cost matrix
                5.0, 5.0, 0.1, 1.0]  
     R_diags: [0.1, 0.1]             # diagonal elements of the control cost matrix
-    N_elite: 100                    # number of elite samples
-    CEM_iters: 20                   # number of CEM iterations
+    N_elite: 3                    # number of elite samples
+    CEM_iters: 1                   # number of CEM iterations
 
 ####################################################################
 # Distribution Parameters
@@ -43,7 +43,7 @@ CTRL_PARAMS:
 
 DIST_PARAMS:
     mu: [0., 0.8]              # initial means [l0dot_vel, thetadot_vel]
-    sigma: [0.0000001, 0.01]           # initial standard deviations
+    sigma: [1.0, 3.14]           # initial standard deviations
     min_varaince: [0.05, 0.05]  # minimum variance of the state distribution
     diag_cov: False             # strictly enforce diagonal covariance matrix
     seed_enabled: False         # enable random seed

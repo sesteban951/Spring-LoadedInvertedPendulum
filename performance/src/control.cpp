@@ -271,13 +271,12 @@ double Controller::cost_function(Vector_8d_Traj X_ref, Solution Sol, Vector_2d_T
 
 
 // perform open loop rollouts
-MC_Tuple Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
+MC_Result Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
 {
     // compute u(t) dt (N of the integration is not necessarily equal to the number of control points)
     double T = (this->params.N-1) * this->params.dt;
     double dt_u = T / (this->params.Nu-1);
 
-    auto t0 = std::chrono::high_resolution_clock::now();
     // generate the time arrays
     Vector_1d_Traj T_x;
     Vector_1d_Traj T_u;
@@ -289,15 +288,10 @@ MC_Tuple Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
     for (int i = 0; i < this->params.Nu; i++) {
         T_u[i] = i * dt_u;
     }
-    auto tf = std::chrono::high_resolution_clock::now();
-    std::cout << "Time to generate time arrays: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // generate bundle of input trajectories
     Vector_2d_Traj_Bundle U_bundle;
-    t0 = std::chrono::high_resolution_clock::now();
     U_bundle = this->sample_input_trajectory(this->params.K);
-    tf = std::chrono::high_resolution_clock::now();
-    std::cout << "Time to sample input trajectories: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // initialize the containers for the solutions
     Solution_Bundle Sol_bundle;
@@ -307,14 +301,10 @@ MC_Tuple Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
 
     // generate the reference trajectory
     Vector_8d_Traj X_ref;
-    t0 = std::chrono::high_resolution_clock::now();
     X_ref = this->generate_reference_trajectory(x0_sys.head<4>());
-    tf = std::chrono::high_resolution_clock::now();
-    std::cout << "Time to generate reference trajectory: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // loop over the input trajectories
     Solution sol;
-    t0 = std::chrono::high_resolution_clock::now();
     for (int k = 0; k < U_bundle.size(); k++) {
 
         // perform the rollout
@@ -326,13 +316,98 @@ MC_Tuple Controller::monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
         // store the solution
         Sol_bundle[k] = sol;
     }
-    tf = std::chrono::high_resolution_clock::now();
-    std::cout << "Time to perform rollouts: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
 
     // pack solutions into a tuple
-    MC_Tuple mc_tuple;
-    mc_tuple = std::make_tuple(Sol_bundle, U_bundle, J);
+    MC_Result mc;
+    mc.S = Sol_bundle;
+    mc.U = U_bundle;
+    mc.J = J;
 
     // return the solutions
-    return mc_tuple;
+    return mc;
+}
+
+
+// select the best inputs based on cost
+Vector_2d_Traj_Bundle Controller::sort_inputs(Vector_2d_Traj_Bundle U, Vector_1d_Traj J)
+{
+    // elite input bundle
+    Vector_2d_Traj_Bundle U_elite;
+    U_elite.resize(this->params.N_elite);
+
+    for ( int i = 0; i < this->params.K; i++ ) {
+        std::cout << J[i] << "  |  ";
+        Vector_2d_Traj Ui = U[i];
+        for (int j = 0; j < Ui.size(); j++) {
+            std::cout << Ui[j](0) << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout << "=====================" << std::endl;
+
+    // sort the cost vector in ascending order
+    std::vector<int> idx(J.size());
+    std::iota(idx.begin(), idx.end(), 0);
+    std::sort(idx.begin(), idx.end(), [&J](int i1, int i2) {return J[i1] < J[i2];});
+
+    for ( int i = 0; i < idx.size(); i++ ) {
+        std::cout << J[idx[i]]  << "  |  ";
+        Vector_2d_Traj Ui = U[idx[i]];
+        for (int j = 0; j < Ui.size(); j++) {
+            std::cout << Ui[j](0) << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    std::cout << "=====================" << std::endl;
+
+    // select the best inputs
+    for (int i = 0; i < this->params.N_elite; i++) {
+        U_elite[i] = U[idx[i]];
+    }
+
+    for ( int i = 0; i < U_elite.size(); i++ ) {
+        std::cout << J[idx[i]]  << "  |  ";
+        Vector_2d_Traj Ui = U_elite[i];
+        for (int j = 0; j < Ui.size(); j++) {
+            std::cout << Ui[j](0) << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    return U_elite;
+}
+
+
+// perform sampling predictive control of your choice here
+Solution Controller::sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0)
+{
+    // Monte Carlo Result
+    MC_Result mc;
+
+    // variables for unpacked variables
+    Vector_2d_Traj_Bundle U, U_elite;
+    Vector_1d_Traj J;
+    J.resize(this->params.K);
+    U.resize(this->params.K);
+    U_elite.resize(this->params.N_elite);
+
+    for (int i = 0; i < this->params.CEM_iters; i++) {
+        // perform monte carlo simulation
+        mc = this->monte_carlo(x0_sys, p0_foot, d0);
+
+        // the monte carlos results
+        U = mc.U;
+        J = mc.J;
+
+        // sort the cost vector in ascending order
+        U_elite = this->sort_inputs(U, J);
+
+        // update the distribution parameters
+        this->update_dsitribution_params(U_elite);
+    }
+
+    // Return the final solution
+    return mc.S[0];
 }

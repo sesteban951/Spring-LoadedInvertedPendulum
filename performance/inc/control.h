@@ -38,7 +38,13 @@ class Controller
         double cost_function(Vector_8d_Traj X_des, Solution Sol, Vector_2d_Traj U);
 
         // perform open loop rollouts
-        MC_Tuple monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
+        MC_Result monte_carlo(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
+
+        // sort inputs based on cost
+        Vector_2d_Traj_Bundle sort_inputs(Vector_2d_Traj_Bundle U, Vector_1d_Traj J);
+
+        // sampling predictive control scheme here
+        Solution sampling_predictive_control(Vector_6d x0_sys, Vector_2d p0_foot, Domain d0);
 
     // private:
         // internal dynamics object

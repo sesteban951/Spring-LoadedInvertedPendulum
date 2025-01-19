@@ -25,65 +25,28 @@ int main()
     Controller controller(config_file);
 
     // testing querying the dynamics
-    Vector_6d x;
-    Vector_2d u;
-    Vector_2d p_foot;
-    Domain d;
+    Vector_6d x0;
+    Vector_2d p0_foot;
+    Domain d0;
 
     // initial conditions
-    x << 0.0,    // px_com
-         0.75, // pz_com
-         0.5,    // vx_com
-         0.5,    // vz_com
-         dynamics.params.l0,    // l0_command
-         0.0;                   // theta_command
-    p_foot << 0.0,  // px_foot
-              0.0;  // pz_foot
-    d = Domain::FLIGHT;
+    x0 << 0.0,    // px_com
+          0.75, // pz_com
+          0.5,    // vx_com
+          0.5,    // vz_com
+          dynamics.params.l0,    // l0_command
+          0.0;                   // theta_command
+    p0_foot << 0.0,  // px_foot
+               0.0;  // pz_foot
+    d0 = Domain::FLIGHT;
 
-    // build a time vector
-    Vector_1d_Traj T_x;
-    T_x.resize(controller.params.N);
-    for (int i = 0; i < controller.params.N; i++) {
-        T_x[i] = i * controller.params.dt;
-    }
-
-    // build input trajectory
-    Vector_1d_Traj T_u;
-    Vector_2d_Traj U;
-    Vector_2d U_const;
-    T_u.resize(controller.params.Nu);
-    U.resize(controller.params.Nu);
-    U_const << 0.0, -0.5;
-    for (int i = 0; i < controller.params.Nu; i++) {
-        T_u[i] = i * controller.params.dt;
-        U[i] = U_const;
-    }
-
-
-    // single rollout
+    // perform monte carlo simulation
     Solution sol;
-    // auto t0 = std::chrono::high_resolution_clock::now();
-    // sol = dynamics.RK3_rollout(T_x, T_u, x, p_foot, d, U);
-    // auto t1 = std::chrono::high_resolution_clock::now();
-    // std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() << " microseconds" << std::endl;
-
-
-    // generate a reference trajectory
-    // Vector_8d_Traj X_ref;
-    // X_ref = controller.generate_reference_trajectory(x.head<4>());
-
-    // // evaluate the cost function
-    // double J = controller.cost_function(X_ref, sol, U);
-
-    // std::cout << "Cost: " << J << std::endl;
-
     auto t0 = std::chrono::high_resolution_clock::now();
-    MC_Tuple mc_tuple;
-    mc_tuple = controller.monte_carlo(x, p_foot, d);
-    auto tf = std::chrono::high_resolution_clock::now();
-    std::cout << "Time to integrate: " << std::chrono::duration_cast<std::chrono::microseconds>(tf - t0).count() << " microseconds" << std::endl;
-
+    sol = controller.sampling_predictive_control(x0, p0_foot, d0);
+    auto t1 = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = t1 - t0;
+    std::cout << "Elapsed time: " << elapsed.count() << " seconds" << std::endl;
 
     // // where to save each trajectory
     // std::string time_file = "../data/time.csv";

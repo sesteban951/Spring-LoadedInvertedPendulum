@@ -115,10 +115,14 @@ using Vector_d_Traj_Bundle = std::vector<Vector_d_Traj>;
 using Solution_Bundle = std::vector<Solution>;
 
 // ***********************************************************************************
-// Tuples
+// Monte Carlo Result
 // ***********************************************************************************
 
-// Monte Carlo Tuple
-using MC_Tuple = std::tuple<Solution_Bundle, Vector_2d_Traj_Bundle, Vector_1d_Traj>;
+struct MC_Result
+{
+    Solution_Bundle S;        // Solutions
+    Vector_2d_Traj_Bundle U;  // Control Inputs  
+    Vector_1d_Traj J;         // Costs
+};
 
 #endif
