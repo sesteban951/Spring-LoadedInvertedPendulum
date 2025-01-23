@@ -221,7 +221,7 @@ Vector_8d_Traj Controller::generate_reference_trajectory(Vector_4d x0_com)
     // populate the reference trajectory
     Vector_8d xi_ref;
     for (int i = 0; i < this->params.N; i++) {
-        xi_ref << x0_com(0) + this->vx_des * this->params.dt,  // px
+        xi_ref << x0_com(0) + this->vx_des * this->params.dt * i,  // px TODO: LOL, I completely forgot about dt * i (fixed it)
                   this->pz_des,             // pz
                   this->vx_des,             // vx
                   0.0,                      // vz
