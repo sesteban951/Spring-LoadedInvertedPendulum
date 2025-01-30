@@ -15,6 +15,7 @@ r0 = [0, 0, -1]';
 
 % rotation matrix
 R = R_y(angle_y) * R_x(angle_x);
+% R = R_x(angle_x) * R_y(angle_y);
 
 % rotated vector
 r = R * r0;
