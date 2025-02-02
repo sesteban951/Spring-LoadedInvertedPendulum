@@ -4,7 +4,7 @@
 clear all; clc; close all;
 
 % sine wave function
-A = pi/4;
+A = (pi/2) * 1.0;  % WARNING: theta only in the range (-pi/2, pi/2)
 f = 1;
 phi = pi/2;
 t = 0:0.01:3;
