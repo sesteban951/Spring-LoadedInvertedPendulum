@@ -4,14 +4,18 @@
 clear all; clc; close all;
 
 % gait cycle parameters
-T_gait = 1.0;
-r_L = 0.5;
-r_R = 0.5;
-offset_L = 0.0;
-offset_R = 0.5;
+% T_gait = 1.0;
+% c_L = 0.5;
+% c_R = 0.5;
+% offset_L = 0.0;
+% offset_R = 0.5;
+
+% based on velocity
+v_des = 0.75;
+[T_gait, c_L, c_R, offset_L, offset_R] = gait_cycle_parameters(v_des)
 
 % time vector
-T_sim = 8.0;
+T_sim = 10.0;
 t = 0:0.01:T_sim;
 
 % gait cycle 
@@ -21,14 +25,14 @@ signal_R = zeros(1,length(t));
 % gait cycle signal
 for i = 1:length(t)
     % left leg
-    if mod(t(i)/T_gait - offset_L, 1.0) < r_L
+    if mod(t(i)/T_gait - offset_L, 1.0) < c_L
         signal_L(i) = 1;
     else 
         signal_L(i) = 0;
     end
 
     % right leg
-    if mod(t(i)/T_gait - offset_R, 1.0) < r_R
+    if mod(t(i)/T_gait - offset_R, 1.0) < c_R
         signal_R(i) = 1;
     else 
         signal_R(i) = 0;
@@ -52,7 +56,6 @@ n = floor(T_sim/T_gait);
 for i = 1:n
     xline(i*T_gait, '--k', 'LineWidth', 1.5)
 end
-drawnow;
 
 pause(0.1);
 
@@ -109,4 +112,27 @@ while idx < length(t)
         delete(leg_L);
         delete(leg_R);
     end
+end
+
+% gait cycle parameters as a function of velocity
+function [T_gait, c_L, c_R, offset_L, offset_R] = gait_cycle_parameters(v_des)
+    
+    % assume that the gait cycle is perfectly out of phase
+    offset_L = 0.0;
+    offset_R = 0.5;
+
+    % fix low and high bounds
+    c_min = 0.2;
+    c_max = 1.0;
+    Tg_min = 0.5;
+    Tg_max = 1.2;
+    v_max = 1.5;
+
+    % compute contact ratio
+    c_L = 1 + (c_min-1)/ (v_max) * v_des;
+    c_R = 1 + (c_min-1)/ (v_max) * v_des;
+
+    % compute the gait cycle period
+    T_gait = Tg_min + (Tg_max - Tg_min) / (v_max) * v_des;
+
 end
