@@ -91,11 +91,17 @@ down_times = [4.87 5.64 6.35 7.1 7.89];
 data = [data; v_des, T_cycle, c];
 
 % add the standing data
-data = [0, 0.8, 1.075; data];
+% data = [0, 0.8, 1.075; data];
 
 % curve fit a quadratic c sv v_des
-p_T = polyfit(data(:,1), data(:,2), 2);
-p_c = polyfit(data(:,1), data(:,3), 3);
+p_T = polyfit(data(:,1), data(:,2), 2)
+p_c = polyfit(data(:,1), data(:,3), 3)
+
+% display the curve fit parameters
+disp("*******************************************************")
+disp("T_cycle = (" + p_T(1) + ")*v^2  + (" + p_T(2) + ")*v + (" + p_T(3)+ ")");
+disp("      c = (" + p_c(1) + ")*v^3 + (" + p_c(2) + ")*v^2 + (" + p_c(3) + ")*v + (" + p_c(4) + ")");
+disp("*******************************************************")
 
 % build the 3D plot
 figure;
